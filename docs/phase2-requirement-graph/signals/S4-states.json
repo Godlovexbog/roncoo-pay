@@ -1,0 +1,72 @@
+{
+  "signal_type": "S4-states",
+  "enums": [
+    {
+      "enum_name": "TradeStatusEnum",
+      "values": ["SUCCESS", "FAILED", "CREATED", "CANCELED", "WAITING_PAYMENT"],
+      "usage_in_call_chain": [
+        {"method": "f2fPay", "usage": "检查订单状态是否为SUCCESS，防止重复支付"},
+        {"method": "completeSuccessOrder", "usage": "设置订单和记录状态为SUCCESS"},
+        {"method": "completeFailOrder", "usage": "设置订单和记录状态为FAILED"},
+        {"method": "sealF2FRpTradePaymentOrder", "usage": "设置新订单状态为WAITING_PAYMENT"}
+      ]
+    },
+    {
+      "enum_name": "PayTypeEnum",
+      "values": ["MICRO_PAY", "F2F_PAY", "DIRECT_PAY", "SCANPAY", "HUA_BEI_FEN_QI_PAY"],
+      "usage_in_call_chain": [
+        {"method": "f2fPay", "usage": "验证payType是否为MICRO_PAY或F2F_PAY"},
+        {"method": "getF2FPayResultVo", "usage": "根据payWayCode设置payType"}
+      ]
+    },
+    {
+      "enum_name": "PayWayEnum",
+      "values": ["WEIXIN", "ALIPAY"],
+      "usage_in_call_chain": [
+        {"method": "f2fPay", "usage": "根据payType获取payWayCode"},
+        {"method": "getF2FPayResultVo", "usage": "判断走微信还是支付宝分支"}
+      ]
+    },
+    {
+      "enum_name": "SecurityRatingEnum",
+      "values": ["MD5", "MD5_IP"],
+      "usage_in_call_chain": [
+        {"method": "CnpPayService.checkIp", "usage": "检查安全等级是否为MD5_IP，决定是否校验IP"}
+      ]
+    },
+    {
+      "enum_name": "FundInfoTypeEnum",
+      "values": ["MERCHANT_RECEIVES", "PLAT_RECEIVES"],
+      "usage_in_call_chain": [
+        {"method": "completeSuccessOrder", "usage": "判断资金流入类型，决定是否执行账户入账"},
+        {"method": "getF2FPayResultVo", "usage": "根据资金流向获取商户配置信息"}
+      ]
+    },
+    {
+      "enum_name": "PublicStatusEnum",
+      "values": ["ACTIVE", "UNACTIVE"],
+      "usage_in_call_chain": [
+        {"method": "RpUserPayConfigServiceImpl.getByPayKey", "usage": "查询条件：status=ACTIVE"}
+      ]
+    },
+    {
+      "enum_name": "PublicEnum",
+      "values": ["YES", "NO"],
+      "usage_in_call_chain": [
+        {"method": "RpUserPayConfigServiceImpl.getByPayKey", "usage": "查询条件：auditStatus=YES"}
+      ]
+    }
+  ],
+  "transaction_boundaries": [
+    {
+      "method": "RpTradePaymentManagerServiceImpl.completeSuccessOrder",
+      "annotation": "@Transactional(rollbackFor = Exception.class)",
+      "operations": ["更新支付记录状态", "更新订单状态", "账户入账(平台收款时)", "发送商户通知"]
+    },
+    {
+      "method": "RpTradePaymentManagerServiceImpl.completeScanPay",
+      "annotation": "@Transactional(rollbackFor = Exception.class)",
+      "operations": ["处理异步通知", "更新支付记录", "更新订单", "账户入账", "发送商户通知"]
+    }
+  ]
+}

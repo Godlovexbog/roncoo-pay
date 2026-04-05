@@ -1,0 +1,30 @@
+{
+  "signal_type": "S2-database",
+  "tables": [
+    {
+      "table_name": "rp_trade_payment_order",
+      "entity_class": "RpTradePaymentOrder",
+      "operations": [
+        {"method": "RpTradePaymentOrderDao.selectByMerchantNoAndMerchantOrderNo", "type": "READ", "called_by": ["f2fPay", "completeSuccessOrder", "completeFailOrder"]},
+        {"method": "RpTradePaymentOrderDao.insert", "type": "WRITE", "called_by": ["f2fPay (订单不存在时)"]},
+        {"method": "RpTradePaymentOrderDao.update", "type": "WRITE", "called_by": ["getF2FPayResultVo (设置payTypeCode)", "completeSuccessOrder (设置状态)", "completeFailOrder (设置状态)"]}
+      ]
+    },
+    {
+      "table_name": "rp_trade_payment_record",
+      "entity_class": "RpTradePaymentRecord",
+      "operations": [
+        {"method": "RpTradePaymentRecordDao.insert", "type": "WRITE", "called_by": ["getF2FPayResultVo"]},
+        {"method": "RpTradePaymentRecordDao.update", "type": "WRITE", "called_by": ["completeSuccessOrder", "completeFailOrder"]}
+      ]
+    },
+    {
+      "table_name": "rp_user_pay_config",
+      "entity_class": "RpUserPayConfig",
+      "operations": [
+        {"method": "RpUserPayConfigDao.getBy", "type": "READ", "called_by": ["RpUserPayConfigServiceImpl.getByPayKey"]},
+        {"method": "RpUserPayConfigDao.getByUserNo", "type": "READ", "called_by": ["getMerchantNotifyUrl"]}
+      ]
+    }
+  ]
+}

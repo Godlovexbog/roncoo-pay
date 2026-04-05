@@ -1,0 +1,90 @@
+{
+  "graph_type": "Requirement Graph",
+  "module": "F2FPayController.initPay 业务流程",
+  "nodes": [
+    {
+      "id": "CAP-02",
+      "type": "Capability",
+      "attributes": {
+        "name": "条码支付能力",
+        "purpose": "提供条码支付（用户被扫）相关的业务能力",
+        "signal_score": 0.88
+      }
+    },
+    {
+      "id": "PROC-01",
+      "type": "Process",
+      "attributes": {
+        "name": "支付交易流程",
+        "trigger": "商户通过前置设备获取用户支付授权码后调用 /f2fPay/doPay",
+        "terminal_states": ["支付成功(SUCCESS)", "支付失败(FAILED)", "支付结果未知(需轮询)"]
+      }
+    },
+    {
+      "id": "REQ-010",
+      "type": "Requirement",
+      "attributes": {
+        "name": "条码支付-参数校验",
+        "purpose": "验证商户身份、支付授权码、订单参数合法性",
+        "input": "F2FPayRequestBo(payKey, authCode, productName, orderNo, orderPrice, orderIp)",
+        "output": "RpUserPayConfig(商户支付配置)",
+        "source_signals": ["S1:/f2fPay/doPay", "S3:CnpPayService.checkParamAndGetUserPayConfig"]
+      }
+    },
+    {
+      "id": "REQ-011",
+      "type": "Requirement",
+      "attributes": {
+        "name": "条码支付-订单管理",
+        "purpose": "查询或创建支付订单，防止重复支付",
+        "input": "merchantNo, orderNo, orderPrice",
+        "output": "RpTradePaymentOrder(已存在或新建)",
+        "source_signals": ["S2:rp_trade_payment_order", "S3:selectByMerchantNoAndMerchantOrderNo"]
+      }
+    },
+    {
+      "id": "REQ-012",
+      "type": "Requirement",
+      "attributes": {
+        "name": "条码支付-执行支付",
+        "purpose": "调用微信micropay或支付宝tradePay完成条码支付",
+        "input": "bankOrderNo, authCode, productName, orderAmount, orderIp",
+        "output": "支付结果(成功/失败/未知)",
+        "source_signals": ["S3:WeiXinPayUtil.micropay, AliPayUtil.tradePay"]
+      }
+    },
+    {
+      "id": "REQ-013",
+      "type": "Requirement",
+      "attributes": {
+        "name": "条码支付-结果处理",
+        "purpose": "根据支付结果更新订单状态、入账、通知商户",
+        "input": "支付结果(成功/失败/未知)",
+        "output": "F2FPayResultVo(含签名)",
+        "source_signals": ["S4:TradeStatusEnum状态变更", "S3:completeSuccessOrder/completeFailOrder"]
+      }
+    },
+    {
+      "id": "REQ-014",
+      "type": "Requirement",
+      "attributes": {
+        "name": "条码支付-订单查询",
+        "purpose": "根据交易流水号查询支付记录",
+        "input": "trxNo",
+        "output": "RpTradePaymentRecord (JSON)",
+        "source_signals": ["S1:/f2fPay/order/query"]
+      }
+    }
+  ],
+  "edges": [
+    {"source": "CAP-02", "target": "PROC-01", "type": "parent_child"},
+    {"source": "PROC-01", "target": "REQ-010", "type": "parent_child"},
+    {"source": "PROC-01", "target": "REQ-011", "type": "parent_child"},
+    {"source": "PROC-01", "target": "REQ-012", "type": "parent_child"},
+    {"source": "PROC-01", "target": "REQ-013", "type": "parent_child"},
+    {"source": "PROC-01", "target": "REQ-014", "type": "parent_child"},
+    {"source": "REQ-010", "target": "REQ-011", "type": "semantic_similar", "attributes": {"relation": "precedes"}},
+    {"source": "REQ-011", "target": "REQ-012", "type": "semantic_similar", "attributes": {"relation": "precedes"}},
+    {"source": "REQ-012", "target": "REQ-013", "type": "semantic_similar", "attributes": {"relation": "precedes"}}
+  ]
+}

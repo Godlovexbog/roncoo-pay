@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>双图可视化 - F2FPayController.initPay 条码支付能力</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:#f5f5f5;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+#header{background:#1a237e;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:16px;flex-wrap:wrap}
+#header .left{display:flex;align-items:center;gap:16px}
+#header h1{font-size:17px;font-weight:500;white-space:nowrap}
+#header .stats{font-size:12px;opacity:.85}
+#header .right{display:flex;align-items:center;gap:10px}
+.graph-toggle{display:flex;background:rgba(255,255,255,.15);border-radius:6px;overflow:hidden}
+.graph-toggle button{padding:6px 14px;border:none;background:transparent;color:#fff;cursor:pointer;font-size:13px;transition:all .2s;white-space:nowrap}
+.graph-toggle button.active{background:#fff;color:#1a237e;font-weight:600}
+.graph-toggle button:hover:not(.active){background:rgba(255,255,255,.25)}
+#search-box{display:flex;align-items:center;gap:6px}
+#search-box input{padding:5px 10px;border:none;border-radius:4px;font-size:13px;width:180px;outline:none}
+#search-box input:focus{box-shadow:0 0 0 2px #64b5f6}
+#search-box button{padding:5px 10px;background:#64b5f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px}
+#search-box button:hover{background:#42a5f5}
+#main{display:flex;flex:1;overflow:hidden}
+#sidebar{width:210px;background:#fff;border-right:1px solid #e0e0e0;padding:14px;overflow-y:auto;flex-shrink:0}
+#sidebar h3{font-size:13px;color:#333;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #eee}
+#sidebar .filter-group{margin-bottom:14px}
+#sidebar .filter-group label{display:flex;align-items:center;gap:5px;font-size:12px;color:#555;padding:2px 0;cursor:pointer}
+#sidebar .filter-group input[type=checkbox]{accent-color:#1a237e}
+#sidebar .color-dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
+#chart{flex:1;background:#fafafa}
+#detail{width:300px;background:#fff;border-left:1px solid #e0e0e0;padding:14px;overflow-y:auto;flex-shrink:0;display:none;z-index:100}
+#detail.visible{display:block}
+#detail h3{font-size:14px;color:#1a237e;margin-bottom:10px;word-break:break-all}
+#detail .detail-section{margin-bottom:12px}
+#detail .detail-section h4{font-size:12px;color:#666;margin-bottom:4px;font-weight:600;text-transform:uppercase}
+#detail .detail-section p,#detail .detail-section div{font-size:12px;color:#333;line-height:1.6}
+#detail .tag{display:inline-block;background:#e3f2fd;color:#1565c0;padding:2px 7px;border-radius:10px;font-size:11px;margin:2px 3px 2px 0}
+#detail .tag.cross-module{background:#fce4ec;color:#c62828}
+#detail .tag.transactional{background:#e8f5e9;color:#2e7d32}
+#detail .tag.graph-req{background:#e8eaf6;color:#283593;border:1px solid #7986cb}
+#detail .tag.graph-ds{background:#fce4ec;color:#880e4f;border:1px solid #e91e63}
+#detail .tag.framework{background:#f3e5f5;color:#6a1b9a}
+#detail .tag.external{background:#fff3e0;color:#e65100}
+#detail .tag.interface-jump{background:#e0f7fa;color:#006064;border:1px solid #00bcd4}
+#detail .close-btn{float:right;background:none;border:none;font-size:18px;cursor:pointer;color:#999}
+#detail .close-btn:hover{color:#333}
+</style>
+</head>
+<body>
+<div id="header">
+<div class="left">
+<h1>双图可视化 — CAP-02 条码支付能力</h1>
+<div class="stats" id="stats"></div>
+</div>
+<div class="right">
+<div class="graph-toggle">
+<button id="btn-both" class="active" onclick="switchGraph('both')">双图合并</button>
+<button id="btn-req" onclick="switchGraph('req')">需求图谱</button>
+<button id="btn-ds" onclick="switchGraph('ds')">DS-Code图</button>
+</div>
+<div id="search-box">
+<input type="text" id="search-input" placeholder="搜索节点..." onkeydown="if(event.key==='Enter')searchNode()">
+<button onclick="searchNode()">搜索</button>
+<button onclick="resetZoom()">重置</button>
+</div>
+</div>
+</div>
+<div id="main">
+<div id="sidebar">
+<div class="filter-group"><h3>节点类型</h3><div id="node-filters"></div></div>
+<div class="filter-group"><h3>边类型</h3><div id="edge-filters"></div></div>
+<div class="filter-group"><h3>方法角色</h3><div id="role-filters"></div></div>
+</div>
+<div id="chart"></div>
+<div id="detail"><button class="close-btn" onclick="closeDetail()">&times;</button><div id="detail-content"></div></div>
+</div>
+<script>
+// ===== DATA =====
+const dsNodes = [
+{"id":"M:F2FPayController.java","type":"Module","attributes":{"file_path":"roncoo-pay-web-gateway/F2FPayController.java","package":"com.roncoo.pay.controller","line_count":81}},
+{"id":"C:F2FPayController","type":"Class","attributes":{"name":"F2FPayController","annotations":["@Controller","@RequestMapping(/f2fPay)"],"extends":"BaseController","module":"roncoo-pay-web-gateway"}},
+{"id":"M:F2FPayController.initPay","type":"Method","attributes":{"name":"initPay","return_type":"String","parameters":["F2FPayRequestBo","BindingResult","HttpServletRequest","ModelMap"],"annotations":["@RequestMapping(/doPay)"],"role":"entry_point"}},
+{"id":"M:F2FPayController.orderQuery","type":"Method","attributes":{"name":"orderQuery","return_type":"String","parameters":["String trxNo"],"annotations":["@RequestMapping(/order/query)","@ResponseBody"],"role":"local_context"}},
+{"id":"C:CnpPayService","type":"Class","attributes":{"name":"CnpPayService","annotations":["@Service(cnpPayService)"],"module":"roncoo-pay-web-gateway","role":"injected_dependency"}},
+{"id":"M:CnpPayService.checkParamAndGetUserPayConfig","type":"Method","attributes":{"name":"checkParamAndGetUserPayConfig","return_type":"RpUserPayConfig","parameters":["Object","BindingResult","HttpServletRequest"],"module":"roncoo-pay-web-gateway","role":"supporting"}},
+{"id":"M:CnpPayService.checkIp","type":"Method","attributes":{"name":"checkIp","parameters":["RpUserPayConfig","HttpServletRequest"],"module":"roncoo-pay-web-gateway","role":"supporting"}},
+{"id":"M:CnpPayService.getErrorResponse","type":"Method","attributes":{"name":"getErrorResponse","return_type":"String","parameters":["BindingResult"],"module":"roncoo-pay-web-gateway","role":"supporting"}},
+{"id":"C:RpTradePaymentManagerService","type":"Class","attributes":{"name":"RpTradePaymentManagerService","module":"roncoo-pay-service","role":"injected_dependency"}},
+{"id":"C:RpTradePaymentManagerServiceImpl","type":"Class","attributes":{"name":"RpTradePaymentManagerServiceImpl","module":"roncoo-pay-service","implements":["RpTradePaymentManagerService"]}},
+{"id":"M:RpTradePaymentManagerServiceImpl.f2fPay","type":"Method","attributes":{"name":"f2fPay","return_type":"F2FPayResultVo","parameters":["RpUserPayConfig","F2FPayRequestBo"],"module":"roncoo-pay-service","role":"core"}},
+{"id":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","type":"Method","attributes":{"name":"getF2FPayResultVo","return_type":"F2FPayResultVo","visibility":"private","role":"core"}},
+{"id":"M:RpTradePaymentManagerServiceImpl.sealF2FRpTradePaymentOrder","type":"Method","attributes":{"name":"sealF2FRpTradePaymentOrder","visibility":"private","role":"core"}},
+{"id":"M:RpTradePaymentManagerServiceImpl.sealRpTradePaymentRecord","type":"Method","attributes":{"name":"sealRpTradePaymentRecord","visibility":"private","role":"core"}},
+{"id":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","type":"Method","attributes":{"name":"completeSuccessOrder","annotations":["@Transactional"],"visibility":"package-private","role":"core"}},
+{"id":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","type":"Method","attributes":{"name":"completeFailOrder","visibility":"private","role":"core"}},
+{"id":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","type":"Method","attributes":{"name":"getMerchantNotifyUrl","visibility":"private","role":"supporting"}},
+{"id":"C:RpTradePaymentQueryService","type":"Class","attributes":{"name":"RpTradePaymentQueryService","module":"roncoo-pay-service","role":"injected_dependency"}},
+{"id":"M:RpTradePaymentQueryService.getRecordByTrxNo","type":"Method","attributes":{"name":"getRecordByTrxNo","role":"supporting","data_access":"READ"}},
+{"id":"C:RpTradePaymentOrderDao","type":"Class","attributes":{"name":"RpTradePaymentOrderDao","module":"roncoo-pay-service","role":"injected_dependency"}},
+{"id":"C:RpTradePaymentOrderDaoImpl","type":"Class","attributes":{"name":"RpTradePaymentOrderDaoImpl","module":"roncoo-pay-service","extends":"BaseDaoImpl","implements":["RpTradePaymentOrderDao"]}},
+{"id":"M:RpTradePaymentOrderDao.selectByMerchantNoAndMerchantOrderNo","type":"Method","attributes":{"name":"selectByMerchantNoAndMerchantOrderNo","role":"supporting","data_access":"READ"}},
+{"id":"M:RpTradePaymentOrderDao.insert","type":"Method","attributes":{"name":"insert","role":"supporting","data_access":"WRITE"}},
+{"id":"M:RpTradePaymentOrderDao.update","type":"Method","attributes":{"name":"update","role":"supporting","data_access":"WRITE"}},
+{"id":"C:RpTradePaymentRecordDao","type":"Class","attributes":{"name":"RpTradePaymentRecordDao","module":"roncoo-pay-service","role":"injected_dependency"}},
+{"id":"C:RpTradePaymentRecordDaoImpl","type":"Class","attributes":{"name":"RpTradePaymentRecordDaoImpl","module":"roncoo-pay-service","extends":"BaseDaoImpl","implements":["RpTradePaymentRecordDao"]}},
+{"id":"M:RpTradePaymentRecordDao.insert","type":"Method","attributes":{"name":"insert","role":"supporting","data_access":"WRITE"}},
+{"id":"M:RpTradePaymentRecordDao.update","type":"Method","attributes":{"name":"update","role":"supporting","data_access":"WRITE"}},
+{"id":"C:BaseDaoImpl","type":"Class","attributes":{"name":"BaseDaoImpl","module":"roncoo-pay-common-core","extends":"BaseDao","injects":["SqlSessionTemplate"]}},
+{"id":"M:BaseDaoImpl.getBy","type":"Method","attributes":{"name":"getBy","parameters":["Map<String,Object>"],"return_type":"T","module":"roncoo-pay-common-core","role":"framework","data_access":"READ"}},
+{"id":"M:BaseDaoImpl.insert","type":"Method","attributes":{"name":"insert","parameters":["T entity"],"return_type":"int","module":"roncoo-pay-common-core","role":"framework","data_access":"WRITE"}},
+{"id":"M:BaseDaoImpl.update","type":"Method","attributes":{"name":"update","parameters":["T entity"],"return_type":"int","module":"roncoo-pay-common-core","role":"framework","data_access":"WRITE"}},
+{"id":"M:BaseDaoImpl.getStatement","type":"Method","attributes":{"name":"getStatement","parameters":["String sqlId"],"return_type":"String","module":"roncoo-pay-common-core","role":"framework"}},
+{"id":"C:SqlSessionTemplate","type":"Class","attributes":{"name":"SqlSessionTemplate","module":"org.mybatis.spring","role":"framework_injection"}},
+{"id":"M:SqlSessionTemplate.selectOne","type":"Method","attributes":{"name":"selectOne","parameters":["String statement","Object parameter"],"module":"mybatis-spring","role":"framework","data_access":"READ"}},
+{"id":"M:SqlSessionTemplate.insert","type":"Method","attributes":{"name":"insert","parameters":["String statement","Object parameter"],"module":"mybatis-spring","role":"framework","data_access":"WRITE"}},
+{"id":"M:SqlSessionTemplate.update","type":"Method","attributes":{"name":"update","parameters":["String statement","Object parameter"],"module":"mybatis-spring","role":"framework","data_access":"WRITE"}},
+{"id":"C:BuildNoServiceImpl","type":"Class","attributes":{"name":"BuildNoServiceImpl","module":"roncoo-pay-service","implements":"BuildNoService"}},
+{"id":"M:BuildNoServiceImpl.buildBankOrderNo","type":"Method","attributes":{"name":"buildBankOrderNo","return_type":"String","module":"roncoo-pay-service","role":"shared"}},
+{"id":"M:BuildNoServiceImpl.buildTrxNo","type":"Method","attributes":{"name":"buildTrxNo","return_type":"String","module":"roncoo-pay-service","role":"shared"}},
+{"id":"M:IdWorker.getId","type":"Method","attributes":{"name":"getId","module":"com.baomidou.mybatisplus","role":"framework","call_source":"external"}},
+{"id":"C:RpUserPayConfigService","type":"Class","attributes":{"name":"RpUserPayConfigService","module":"roncoo-pay-service/user","role":"injected_dependency"}},
+{"id":"C:RpUserPayConfigServiceImpl","type":"Class","attributes":{"name":"RpUserPayConfigServiceImpl","module":"roncoo-pay-service/user","implements":["RpUserPayConfigService"]}},
+{"id":"M:RpUserPayConfigService.getByPayKey","type":"Method","attributes":{"name":"getByPayKey","parameters":["String"],"return_type":"RpUserPayConfig","module":"roncoo-pay-service/user","role":"shared","is_cross_module":true}},
+{"id":"M:RpUserPayConfigServiceImpl.getByPayKey","type":"Method","attributes":{"name":"getByPayKey","parameters":["String"],"return_type":"RpUserPayConfig","module":"roncoo-pay-service/user","role":"shared"}},
+{"id":"M:RpUserPayConfigService.getByUserNo","type":"Method","attributes":{"name":"getByUserNo","module":"roncoo-pay-service/user","role":"shared","is_cross_module":true}},
+{"id":"M:RpUserPayConfigServiceImpl.getByUserNo","type":"Method","attributes":{"name":"getByUserNo","module":"roncoo-pay-service/user","role":"shared"}},
+{"id":"C:RpUserPayConfigDao","type":"Class","attributes":{"name":"RpUserPayConfigDao","module":"roncoo-pay-service/user","role":"injected_dependency"}},
+{"id":"M:RpUserPayConfigDao.getBy","type":"Method","attributes":{"name":"getBy","parameters":["Map"],"return_type":"RpUserPayConfig","module":"roncoo-pay-service/user","role":"framework","data_access":"READ"}},
+{"id":"M:RpUserPayConfigDao.getByUserNo","type":"Method","attributes":{"name":"getByUserNo","parameters":["String","String"],"return_type":"RpUserPayConfig","module":"roncoo-pay-service/user","role":"framework","data_access":"READ"}},
+{"id":"C:RpUserPayInfoService","type":"Class","attributes":{"name":"RpUserPayInfoService","module":"roncoo-pay-service/user","role":"injected_dependency"}},
+{"id":"M:RpUserPayInfoService.getByUserNo","type":"Method","attributes":{"name":"getByUserNo","module":"roncoo-pay-service/user","role":"shared","is_cross_module":true}},
+{"id":"C:RpUserInfoService","type":"Class","attributes":{"name":"RpUserInfoService","module":"roncoo-pay-service/user","role":"injected_dependency"}},
+{"id":"C:RpUserInfoServiceImpl","type":"Class","attributes":{"name":"RpUserInfoServiceImpl","module":"roncoo-pay-service/user","implements":["RpUserInfoService"]}},
+{"id":"M:RpUserInfoService.getDataByMerchentNo","type":"Method","attributes":{"name":"getDataByMerchentNo","module":"roncoo-pay-service/user","role":"shared","is_cross_module":true}},
+{"id":"M:RpUserInfoServiceImpl.getDataByMerchentNo","type":"Method","attributes":{"name":"getDataByMerchentNo","parameters":["String"],"return_type":"RpUserInfo","module":"roncoo-pay-service/user","role":"shared"}},
+{"id":"C:RpUserInfoDao","type":"Class","attributes":{"name":"RpUserInfoDao","module":"roncoo-pay-service/user","role":"injected_dependency"}},
+{"id":"M:RpUserInfoDao.getBy","type":"Method","attributes":{"name":"getBy","parameters":["Map"],"return_type":"RpUserInfo","module":"roncoo-pay-service/user","role":"framework","data_access":"READ"}},
+{"id":"C:RpPayWayService","type":"Class","attributes":{"name":"RpPayWayService","module":"roncoo-pay-service/user","role":"injected_dependency"}},
+{"id":"C:RpPayWayServiceImpl","type":"Class","attributes":{"name":"RpPayWayServiceImpl","module":"roncoo-pay-service/user","implements":["RpPayWayService"]}},
+{"id":"M:RpPayWayService.getByPayWayTypeCode","type":"Method","attributes":{"name":"getByPayWayTypeCode","parameters":["String","String","String"],"return_type":"RpPayWay","module":"roncoo-pay-service/user","role":"shared","is_cross_module":true}},
+{"id":"M:RpPayWayServiceImpl.getByPayWayTypeCode","type":"Method","attributes":{"name":"getByPayWayTypeCode","parameters":["String","String","String"],"return_type":"RpPayWay","module":"roncoo-pay-service/user","role":"shared"}},
+{"id":"C:RpPayWayDao","type":"Class","attributes":{"name":"RpPayWayDao","module":"roncoo-pay-service/user","role":"injected_dependency"}},
+{"id":"M:RpPayWayDao.getBy","type":"Method","attributes":{"name":"getBy","parameters":["Map"],"return_type":"RpPayWay","module":"roncoo-pay-service/user","role":"framework","data_access":"READ"}},
+{"id":"C:RpNotifyService","type":"Class","attributes":{"name":"RpNotifyService","module":"roncoo-pay-notify","role":"injected_dependency"}},
+{"id":"M:RpNotifyService.orderSend","type":"Method","attributes":{"name":"orderSend","module":"notify","role":"shared","is_cross_module":true}},
+{"id":"M:RpNotifyService.notifySend","type":"Method","attributes":{"name":"notifySend","module":"notify","role":"shared","is_cross_module":true}},
+{"id":"C:RpAccountTransactionService","type":"Class","attributes":{"name":"RpAccountTransactionService","module":"roncoo-pay-account","role":"injected_dependency"}},
+{"id":"M:RpAccountTransactionService.creditToAccount","type":"Method","attributes":{"name":"creditToAccount","module":"account","role":"shared","is_cross_module":true}},
+{"id":"M:WeiXinPayUtil.micropay","type":"Method","attributes":{"name":"micropay","module":"trade/utils/weixin","role":"shared","external_call":"微信刷卡支付API"}},
+{"id":"M:AliPayUtil.tradePay","type":"Method","attributes":{"name":"tradePay","module":"trade/utils/alipay","role":"shared","external_call":"支付宝条码支付API"}},
+{"id":"M:MerchantApiUtil.getSign","type":"Method","attributes":{"name":"getSign","module":"trade/utils","role":"shared"}},
+{"id":"M:MerchantApiUtil.isRightSign","type":"Method","attributes":{"name":"isRightSign","module":"trade/utils","role":"shared"}},
+{"id":"M:MerchantApiUtil.getParamStr","type":"Method","attributes":{"name":"getParamStr","module":"trade/utils","role":"shared"}},
+{"id":"M:MD5Util.encode","type":"Method","attributes":{"name":"encode","module":"trade/utils","role":"shared"}},
+{"id":"C:StringUtil","type":"Class","attributes":{"name":"StringUtil","module":"roncoo-pay-common-core","role":"utility"}},
+{"id":"M:StringUtil.isEmpty","type":"Method","attributes":{"name":"isEmpty","parameters":["String"],"return_type":"boolean","module":"roncoo-pay-common-core","role":"utility"}},
+{"id":"C:NetworkUtil","type":"Class","attributes":{"name":"NetworkUtil","module":"roncoo-pay-web-gateway","role":"utility"}},
+{"id":"M:NetworkUtil.getIpAddress","type":"Method","attributes":{"name":"getIpAddress","parameters":["HttpServletRequest"],"return_type":"String","module":"roncoo-pay-web-gateway","role":"utility"}},
+{"id":"C:SecurityRatingEnum","type":"Class","attributes":{"name":"SecurityRatingEnum","module":"roncoo-pay-common-core","role":"enum"}},
+{"id":"M:SecurityRatingEnum.MD5_IP.name","type":"Method","attributes":{"name":"name","return_type":"String","module":"enum","role":"enum_method","call_source":"framework"}},
+{"id":"C:PublicStatusEnum","type":"Class","attributes":{"name":"PublicStatusEnum","module":"roncoo-pay-common-core","role":"enum"}},
+{"id":"M:PublicStatusEnum.ACTIVE.name","type":"Method","attributes":{"name":"name","return_type":"String","module":"enum","role":"enum_method","call_source":"framework"}},
+{"id":"C:PublicEnum","type":"Class","attributes":{"name":"PublicEnum","module":"roncoo-pay-common-core","role":"enum"}},
+{"id":"M:PublicEnum.YES.name","type":"Method","attributes":{"name":"name","return_type":"String","module":"enum","role":"enum_method","call_source":"framework"}},
+{"id":"C:Validator","type":"Class","attributes":{"name":"Validator","module":"org.springframework.validation","role":"framework_injection"}},
+{"id":"M:Validator.validate","type":"Method","attributes":{"name":"validate","parameters":["Object","BindingResult"],"module":"spring","role":"framework","call_source":"framework"}},
+{"id":"C:BindingResult","type":"Class","attributes":{"name":"BindingResult","module":"org.springframework.validation","role":"framework"}},
+{"id":"M:BindingResult.hasErrors","type":"Method","attributes":{"name":"hasErrors","return_type":"boolean","module":"spring","role":"framework","call_source":"framework"}},
+{"id":"M:BindingResult.getAllErrors","type":"Method","attributes":{"name":"getAllErrors","return_type":"List","module":"spring","role":"framework","call_source":"framework"}},
+{"id":"C:JSONObject","type":"Class","attributes":{"name":"JSONObject","module":"com.alibaba.fastjson","role":"external_library"}},
+{"id":"M:JSONObject.toJSON","type":"Method","attributes":{"name":"toJSON","parameters":["Object"],"module":"fastjson","role":"external_library","call_source":"external"}},
+{"id":"M:JSONObject.parseObject","type":"Method","attributes":{"name":"parseObject","parameters":["String","Class"],"module":"fastjson","role":"external_library","call_source":"external"}},
+{"id":"C:HttpServletRequest","type":"Class","attributes":{"name":"HttpServletRequest","module":"javax.servlet","role":"framework"}},
+{"id":"M:HttpServletRequest.getHeader","type":"Method","attributes":{"name":"getHeader","parameters":["String"],"return_type":"String","module":"servlet","role":"framework","call_source":"framework"}},
+{"id":"M:HttpServletRequest.getRemoteAddr","type":"Method","attributes":{"name":"getRemoteAddr","return_type":"String","module":"servlet","role":"framework","call_source":"framework"}},
+{"id":"M:PayTypeEnum.getEnum","type":"Method","attributes":{"name":"getEnum","parameters":["String"],"return_type":"PayTypeEnum","module":"common-core","role":"enum_method"}},
+{"id":"M:PayWayEnum.getEnum","type":"Method","attributes":{"name":"getEnum","parameters":["String"],"return_type":"PayWayEnum","module":"common-core","role":"enum_method"}},
+{"id":"M:PayWayEnum.name","type":"Method","attributes":{"name":"name","return_type":"String","module":"enum","role":"enum_method","call_source":"framework"}},
+{"id":"M:TradeStatusEnum.name","type":"Method","attributes":{"name":"name","return_type":"String","module":"enum","role":"enum_method","call_source":"framework"}},
+{"id":"M:FundInfoTypeEnum.name","type":"Method","attributes":{"name":"name","return_type":"String","module":"enum","role":"enum_method","call_source":"framework"}},
+{"id":"M:DateUtils.parseDate","type":"Method","attributes":{"name":"parseDate","parameters":["String","String"],"return_type":"Date","module":"common-core","role":"utility"}},
+{"id":"M:DateUtils.formatDate","type":"Method","attributes":{"name":"formatDate","parameters":["Date","String"],"return_type":"String","module":"common-core","role":"utility"}},
+{"id":"M:BigDecimal.valueOf","type":"Method","attributes":{"name":"valueOf","parameters":["double"],"return_type":"BigDecimal","module":"java.math","role":"framework","call_source":"framework"}},
+{"id":"M:BigDecimal.compareTo","type":"Method","attributes":{"name":"compareTo","parameters":["BigDecimal"],"return_type":"int","module":"java.math","role":"framework","call_source":"framework"}},
+{"id":"M:BigDecimal.subtract","type":"Method","attributes":{"name":"subtract","parameters":["BigDecimal"],"return_type":"BigDecimal","module":"java.math","role":"framework","call_source":"framework"}},
+{"id":"M:HashMap.constructor","type":"Method","attributes":{"name":"HashMap","return_type":"void","module":"java.util","role":"framework","call_source":"framework"}},
+{"id":"M:Map.put","type":"Method","attributes":{"name":"put","parameters":["String","Object"],"return_type":"Object","module":"java.util","role":"framework","call_source":"framework"}},
+{"id":"M:Map.get","type":"Method","attributes":{"name":"get","parameters":["Object"],"return_type":"Object","module":"java.util","role":"framework","call_source":"framework"}},
+{"id":"M:String.equals","type":"Method","attributes":{"name":"equals","parameters":["Object"],"return_type":"boolean","module":"java.lang","role":"framework","call_source":"framework"}},
+{"id":"M:Date.constructor","type":"Method","attributes":{"name":"Date","return_type":"void","module":"java.util","role":"framework","call_source":"framework"}},
+{"id":"M:LOG.info","type":"Method","attributes":{"name":"info","parameters":["String","Object..."],"module":"slf4j","role":"framework","call_source":"framework"}},
+{"id":"M:LOG.error","type":"Method","attributes":{"name":"error","parameters":["String","Throwable"],"module":"slf4j","role":"framework","call_source":"framework"}}
+];
+
+const dsEdges = [
+{"source":"M:F2FPayController.java","target":"C:F2FPayController","type":"contain"},
+{"source":"C:F2FPayController","target":"M:F2FPayController.initPay","type":"contain"},
+{"source":"C:F2FPayController","target":"M:F2FPayController.orderQuery","type":"contain"},
+{"source":"C:F2FPayController","target":"C:CnpPayService","type":"import"},
+{"source":"C:F2FPayController","target":"C:RpTradePaymentManagerService","type":"import"},
+{"source":"C:F2FPayController","target":"C:RpTradePaymentQueryService","type":"import"},
+{"source":"M:F2FPayController.initPay","target":"M:CnpPayService.checkParamAndGetUserPayConfig","type":"call"},
+{"source":"M:F2FPayController.initPay","target":"M:RpTradePaymentManagerServiceImpl.f2fPay","type":"call"},
+{"source":"M:F2FPayController.orderQuery","target":"M:RpTradePaymentQueryService.getRecordByTrxNo","type":"call"},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:Validator.validate","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:BindingResult.hasErrors","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:CnpPayService.getErrorResponse","type":"call"},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:JSONObject.toJSON","type":"call","attributes":{"call_source":"external"}},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:JSONObject.parseObject","type":"call","attributes":{"call_source":"external"}},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:Map.get","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:RpUserPayConfigService.getByPayKey","type":"call"},
+{"source":"M:RpUserPayConfigService.getByPayKey","target":"M:RpUserPayConfigServiceImpl.getByPayKey","type":"call","attributes":{"call_type":"接口→实现类跳转","resolved_via_inherit":true}},
+{"source":"M:RpUserPayConfigServiceImpl.getByPayKey","target":"M:HashMap.constructor","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpUserPayConfigServiceImpl.getByPayKey","target":"M:Map.put","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpUserPayConfigServiceImpl.getByPayKey","target":"M:PublicStatusEnum.ACTIVE.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpUserPayConfigServiceImpl.getByPayKey","target":"M:PublicEnum.YES.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpUserPayConfigServiceImpl.getByPayKey","target":"M:RpUserPayConfigDao.getBy","type":"call"},
+{"source":"M:RpUserPayConfigDao.getBy","target":"M:BaseDaoImpl.getBy","type":"call","attributes":{"call_type":"继承调用"}},
+{"source":"M:BaseDaoImpl.getBy","target":"M:BaseDaoImpl.getStatement","type":"call"},
+{"source":"M:BaseDaoImpl.getBy","target":"M:SqlSessionTemplate.selectOne","type":"call"},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:CnpPayService.checkIp","type":"call"},
+{"source":"M:CnpPayService.checkIp","target":"M:SecurityRatingEnum.MD5_IP.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:CnpPayService.checkIp","target":"M:String.equals","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:CnpPayService.checkIp","target":"M:NetworkUtil.getIpAddress","type":"call"},
+{"source":"M:CnpPayService.checkIp","target":"M:StringUtil.isEmpty","type":"call"},
+{"source":"M:CnpPayService.checkIp","target":"M:Map.get","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:CnpPayService.checkIp","target":"M:LOG.error","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:CnpPayService.getErrorResponse","target":"M:BindingResult.getAllErrors","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:NetworkUtil.getIpAddress","target":"M:HttpServletRequest.getHeader","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:NetworkUtil.getIpAddress","target":"M:HttpServletRequest.getRemoteAddr","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:NetworkUtil.getIpAddress","target":"M:String.equals","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:MerchantApiUtil.isRightSign","type":"call"},
+{"source":"M:MerchantApiUtil.isRightSign","target":"M:MerchantApiUtil.getSign","type":"call"},
+{"source":"M:MerchantApiUtil.getSign","target":"M:Map.get","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:MerchantApiUtil.getSign","target":"M:MD5Util.encode","type":"call"},
+{"source":"M:MerchantApiUtil.isRightSign","target":"M:String.equals","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:CnpPayService.checkParamAndGetUserPayConfig","target":"M:LOG.info","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:PayTypeEnum.getEnum","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:PayTypeEnum.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:PayWayEnum.getEnum","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:PayWayEnum.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:RpPayWayService.getByPayWayTypeCode","type":"call"},
+{"source":"M:RpPayWayService.getByPayWayTypeCode","target":"M:RpPayWayServiceImpl.getByPayWayTypeCode","type":"call","attributes":{"call_type":"接口→实现类跳转","resolved_via_inherit":true}},
+{"source":"M:RpPayWayServiceImpl.getByPayWayTypeCode","target":"M:HashMap.constructor","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpPayWayServiceImpl.getByPayWayTypeCode","target":"M:Map.put","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpPayWayServiceImpl.getByPayWayTypeCode","target":"M:PublicStatusEnum.ACTIVE.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpPayWayServiceImpl.getByPayWayTypeCode","target":"M:RpPayWayDao.getBy","type":"call"},
+{"source":"M:RpPayWayDao.getBy","target":"M:BaseDaoImpl.getBy","type":"call","attributes":{"call_type":"继承调用"}},
+{"source":"M:BaseDaoImpl.getBy","target":"M:BaseDaoImpl.getStatement","type":"call"},
+{"source":"M:BaseDaoImpl.getBy","target":"M:SqlSessionTemplate.selectOne","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:RpUserInfoService.getDataByMerchentNo","type":"call"},
+{"source":"M:RpUserInfoService.getDataByMerchentNo","target":"M:RpUserInfoServiceImpl.getDataByMerchentNo","type":"call","attributes":{"call_type":"接口→实现类跳转","resolved_via_inherit":true}},
+{"source":"M:RpUserInfoServiceImpl.getDataByMerchentNo","target":"M:HashMap.constructor","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpUserInfoServiceImpl.getDataByMerchentNo","target":"M:Map.put","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpUserInfoServiceImpl.getDataByMerchentNo","target":"M:PublicStatusEnum.ACTIVE.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpUserInfoServiceImpl.getDataByMerchentNo","target":"M:RpUserInfoDao.getBy","type":"call"},
+{"source":"M:RpUserInfoDao.getBy","target":"M:BaseDaoImpl.getBy","type":"call","attributes":{"call_type":"继承调用"}},
+{"source":"M:BaseDaoImpl.getBy","target":"M:BaseDaoImpl.getStatement","type":"call"},
+{"source":"M:BaseDaoImpl.getBy","target":"M:SqlSessionTemplate.selectOne","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:RpTradePaymentOrderDao.selectByMerchantNoAndMerchantOrderNo","type":"call"},
+{"source":"M:RpTradePaymentOrderDao.selectByMerchantNoAndMerchantOrderNo","target":"M:BaseDaoImpl.getBy","type":"call","attributes":{"call_type":"super.getBy()"}},
+{"source":"M:BaseDaoImpl.getBy","target":"M:BaseDaoImpl.getStatement","type":"call"},
+{"source":"M:BaseDaoImpl.getBy","target":"M:SqlSessionTemplate.selectOne","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:RpTradePaymentManagerServiceImpl.sealF2FRpTradePaymentOrder","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.sealF2FRpTradePaymentOrder","target":"M:BuildNoServiceImpl.buildBankOrderNo","type":"call"},
+{"source":"M:BuildNoServiceImpl.buildBankOrderNo","target":"M:IdWorker.getId","type":"call","attributes":{"call_source":"external"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.sealF2FRpTradePaymentOrder","target":"M:BuildNoServiceImpl.buildTrxNo","type":"call"},
+{"source":"M:BuildNoServiceImpl.buildTrxNo","target":"M:IdWorker.getId","type":"call","attributes":{"call_source":"external"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.sealF2FRpTradePaymentOrder","target":"M:DateUtils.parseDate","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.sealF2FRpTradePaymentOrder","target":"M:Date.constructor","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:RpTradePaymentOrderDao.insert","type":"call"},
+{"source":"M:RpTradePaymentOrderDao.insert","target":"M:BaseDaoImpl.insert","type":"call","attributes":{"call_type":"super.insert()"}},
+{"source":"M:BaseDaoImpl.insert","target":"M:BaseDaoImpl.getStatement","type":"call"},
+{"source":"M:BaseDaoImpl.insert","target":"M:SqlSessionTemplate.insert","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:BigDecimal.compareTo","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:TradeStatusEnum.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:String.equals","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:PayWayEnum.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:String.equals","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpTradePaymentOrderDao.update","type":"call"},
+{"source":"M:RpTradePaymentOrderDao.update","target":"M:BaseDaoImpl.update","type":"call","attributes":{"call_type":"super.update()"}},
+{"source":"M:BaseDaoImpl.update","target":"M:BaseDaoImpl.getStatement","type":"call"},
+{"source":"M:BaseDaoImpl.update","target":"M:SqlSessionTemplate.update","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpTradePaymentManagerServiceImpl.sealRpTradePaymentRecord","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.sealRpTradePaymentRecord","target":"M:BuildNoServiceImpl.buildTrxNo","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.sealRpTradePaymentRecord","target":"M:BuildNoServiceImpl.buildBankOrderNo","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.sealRpTradePaymentRecord","target":"M:BigDecimal.valueOf","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.sealRpTradePaymentRecord","target":"M:Date.constructor","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpTradePaymentRecordDao.insert","type":"call"},
+{"source":"M:RpTradePaymentRecordDao.insert","target":"M:BaseDaoImpl.insert","type":"call","attributes":{"call_type":"super.insert()"}},
+{"source":"M:BaseDaoImpl.insert","target":"M:BaseDaoImpl.getStatement","type":"call"},
+{"source":"M:BaseDaoImpl.insert","target":"M:SqlSessionTemplate.insert","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpUserPayInfoService.getByUserNo","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:WeiXinPayUtil.micropay","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:AliPayUtil.tradePay","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:MerchantApiUtil.getSign","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpNotifyService.orderSend","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:Map.put","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentRecordDao.update","target":"M:BaseDaoImpl.update","type":"call","attributes":{"call_type":"super.update()"}},
+{"source":"M:BaseDaoImpl.update","target":"M:BaseDaoImpl.getStatement","type":"call"},
+{"source":"M:BaseDaoImpl.update","target":"M:SqlSessionTemplate.update","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:RpTradePaymentRecordDao.update","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:RpTradePaymentOrderDao.update","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:RpTradePaymentOrderDao.selectByMerchantNoAndMerchantOrderNo","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:FundInfoTypeEnum.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:String.equals","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:RpAccountTransactionService.creditToAccount","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:BigDecimal.subtract","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:PayTypeEnum.name","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","target":"M:RpUserPayConfigService.getByUserNo","type":"call"},
+{"source":"M:RpUserPayConfigService.getByUserNo","target":"M:RpUserPayConfigServiceImpl.getByUserNo","type":"call","attributes":{"call_type":"接口→实现类跳转","resolved_via_inherit":true}},
+{"source":"M:RpUserPayConfigServiceImpl.getByUserNo","target":"M:RpUserPayConfigDao.getByUserNo","type":"call"},
+{"source":"M:RpUserPayConfigDao.getByUserNo","target":"M:BaseDaoImpl.getBy","type":"call","attributes":{"call_type":"继承调用"}},
+{"source":"M:BaseDaoImpl.getBy","target":"M:BaseDaoImpl.getStatement","type":"call"},
+{"source":"M:BaseDaoImpl.getBy","target":"M:SqlSessionTemplate.selectOne","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","target":"M:HashMap.constructor","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","target":"M:Map.put","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","target":"M:DateUtils.formatDate","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","target":"M:MerchantApiUtil.getParamStr","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","target":"M:MerchantApiUtil.getSign","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:RpNotifyService.notifySend","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","target":"M:RpTradePaymentRecordDao.update","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","target":"M:RpTradePaymentOrderDao.update","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","target":"M:RpTradePaymentOrderDao.selectByMerchantNoAndMerchantOrderNo","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","target":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","type":"call"},
+{"source":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","target":"M:RpNotifyService.notifySend","type":"call"},
+{"source":"M:WeiXinPayUtil.micropay","target":"M:AliPayUtil.tradePay","type":"similarity","attributes":{"reason":"同为条码支付API调用"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.f2fPay","target":"M:RpTradePaymentManagerServiceImpl.initDirectScanPay","type":"similarity","attributes":{"reason":"同为支付入口方法"}},
+{"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpTradePaymentManagerServiceImpl.getScanPayResultVo","type":"similarity","attributes":{"reason":"同为支付结果生成方法"}}
+];
+
+const reqNodes = [
+{"id":"CAP-02","type":"Capability","attributes":{"name":"条码支付能力","purpose":"提供条码支付（用户被扫）相关的业务能力","signal_score":0.88}},
+{"id":"PROC-01","type":"Process","attributes":{"name":"支付交易流程","trigger":"商户通过前置设备获取用户支付授权码后调用 /f2fPay/doPay","terminal_states":["支付成功(SUCCESS)","支付失败(FAILED)","支付结果未知(需轮询)"]}},
+{"id":"REQ-010","type":"Requirement","attributes":{"name":"条码支付-参数校验","purpose":"验证商户身份、支付授权码、订单参数合法性","input":"F2FPayRequestBo(payKey, authCode, productName, orderNo, orderPrice, orderIp)","output":"RpUserPayConfig(商户支付配置)","source_signals":["S1:/f2fPay/doPay","S3:CnpPayService.checkParamAndGetUserPayConfig"]}},
+{"id":"REQ-011","type":"Requirement","attributes":{"name":"条码支付-订单管理","purpose":"查询或创建支付订单，防止重复支付","input":"merchantNo, orderNo, orderPrice","output":"RpTradePaymentOrder(已存在或新建)","source_signals":["S2:rp_trade_payment_order","S3:selectByMerchantNoAndMerchantOrderNo"]}},
+{"id":"REQ-012","type":"Requirement","attributes":{"name":"条码支付-执行支付","purpose":"调用微信micropay或支付宝tradePay完成条码支付","input":"bankOrderNo, authCode, productName, orderAmount, orderIp","output":"支付结果(成功/失败/未知)","source_signals":["S3:WeiXinPayUtil.micropay, AliPayUtil.tradePay"]}},
+{"id":"REQ-013","type":"Requirement","attributes":{"name":"条码支付-结果处理","purpose":"根据支付结果更新订单状态、入账、通知商户","input":"支付结果(成功/失败/未知)","output":"F2FPayResultVo(含签名)","source_signals":["S4:TradeStatusEnum状态变更","S3:completeSuccessOrder/completeFailOrder"]}},
+{"id":"REQ-014","type":"Requirement","attributes":{"name":"条码支付-订单查询","purpose":"根据交易流水号查询支付记录","input":"trxNo","output":"RpTradePaymentRecord (JSON)","source_signals":["S1:/f2fPay/order/query"]}}
+];
+
+const reqEdges = [
+{"source":"CAP-02","target":"PROC-01","type":"parent_child"},
+{"source":"PROC-01","target":"REQ-010","type":"parent_child"},
+{"source":"PROC-01","target":"REQ-011","type":"parent_child"},
+{"source":"PROC-01","target":"REQ-012","type":"parent_child"},
+{"source":"PROC-01","target":"REQ-013","type":"parent_child"},
+{"source":"PROC-01","target":"REQ-014","type":"parent_child"},
+{"source":"REQ-010","target":"REQ-011","type":"semantic_similar","attributes":{"relation":"precedes"}},
+{"source":"REQ-011","target":"REQ-012","type":"semantic_similar","attributes":{"relation":"precedes"}},
+{"source":"REQ-012","target":"REQ-013","type":"semantic_similar","attributes":{"relation":"precedes"}}
+];
+
+const mappingData = [
+{"requirement_id":"REQ-010","requirement_name":"条码支付-参数校验","entry_method":"M:F2FPayController.initPay"},
+{"requirement_id":"REQ-011","requirement_name":"条码支付-订单管理","entry_method":"M:RpTradePaymentManagerServiceImpl.f2fPay"},
+{"requirement_id":"REQ-012","requirement_name":"条码支付-执行支付","entry_method":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo"},
+{"requirement_id":"REQ-013","requirement_name":"条码支付-结果处理","entry_method":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder"},
+{"requirement_id":"REQ-014","requirement_name":"条码支付-订单查询","entry_method":"M:F2FPayController.orderQuery"}
+];
+
+// ===== CONFIG =====
+const nodeTypeConfig = {
+    'Capability':{color:'#1a237e',symbolSize:50,symbol:'circle',label:'能力'},
+    'Process':{color:'#2e7d32',symbolSize:40,symbol:'circle',label:'流程'},
+    'Requirement':{color:'#42a5f5',symbolSize:30,symbol:'rect',label:'需求'},
+    'Module':{color:'#757575',symbolSize:35,symbol:'roundRect',label:'模块'},
+    'Class':{color:'#ab47bc',symbolSize:25,symbol:'rect',label:'类'},
+    'Method':{color:'#ffffff',symbolSize:15,symbol:'rect',label:'方法'},
+    'Function':{color:'#ffa726',symbolSize:12,symbol:'diamond',label:'函数'}
+};
+
+const edgeTypeConfig = {
+    'parent_child':{color:'#333',type:'solid',label:'父子'},
+    'semantic_similar':{color:'#ff9800',type:'dashed',label:'语义相似'},
+    'contain':{color:'#999',type:'solid',label:'包含'},
+    'call':{color:'#1976d2',type:'solid',label:'调用'},
+    'import':{color:'#9c27b0',type:'dotted',label:'导入'},
+    'inherit':{color:'#4caf50',type:'solid',label:'继承'},
+    'similarity':{color:'#ff9800',type:'dashed',label:'相似'},
+    'mapping':{color:'#e91e63',type:'dashed',label:'双图映射'}
+};
+
+const roleConfig = {
+    'entry_point':{color:'#ff5722',label:'入口'},
+    'core':{color:'#f44336',label:'核心'},
+    'supporting':{color:'#9e9e9e',label:'支撑'},
+    'shared':{color:'#ff9800',label:'共享'},
+    'local_context':{color:'#607d8b',label:'本地上下文'},
+    'injected_dependency':{color:'#607d8b',label:'注入依赖'},
+    'framework':{color:'#78909c',label:'框架层'},
+    'framework_injection':{color:'#78909c',label:'框架注入'},
+    'utility':{color:'#26a69a',label:'工具类'},
+    'enum_method':{color:'#8bc34a',label:'枚举方法'},
+    'external_library':{color:'#ff7043',label:'外部库'}
+};
+
+// ===== STATE =====
+let currentGraph = 'both';
+
+// ===== BUILD NODES =====
+function buildAllNodes(){
+    const nodes=[], nodeMap={};
+    reqNodes.forEach(n=>{
+        const cfg=nodeTypeConfig[n.type]||nodeTypeConfig['Method'];
+        const name=n.attributes.name||n.id;
+        const node={id:n.id,name:name,category:n.type,symbolSize:cfg.symbolSize,itemStyle:{color:cfg.color,borderColor:'#333',borderWidth:n.type==='Method'?1:0},_graphType:'req',_attributes:n.attributes,_type:n.type};
+        nodes.push(node); nodeMap[n.id]=node;
+    });
+    dsNodes.forEach(n=>{
+        const cfg=nodeTypeConfig[n.type]||nodeTypeConfig['Method'];
+        const name=n.attributes.name||n.id.replace(/^[^:]+:/,'');
+        let color=cfg.color;
+        if(n.type==='Method'&&n.attributes.role){const rc=roleConfig[n.attributes.role];if(rc)color=rc.color;}
+        if(n.attributes.is_cross_module)color='#ef5350';
+        const node={id:n.id,name:name,category:n.type,symbolSize:cfg.symbolSize,itemStyle:{color:color,borderColor:n.type==='Method'?'#666':'#333',borderWidth:1},_graphType:'ds',_attributes:n.attributes,_type:n.type};
+        nodes.push(node); nodeMap[n.id]=node;
+    });
+    return{nodes,nodeMap};
+}
+
+const{nodes:allNodes,nodeMap}=buildAllNodes();
+
+// ===== BUILD EDGES =====
+function buildAllEdges(){
+    const edges=[];
+    reqEdges.forEach(e=>{edges.push({source:e.source,target:e.target,lineStyle:{color:edgeTypeConfig[e.type]?.color||'#333',type:edgeTypeConfig[e.type]?.type||'solid',width:e.type==='semantic_similar'?2:1.5},_edgeType:e.type});});
+    dsEdges.forEach(e=>{edges.push({source:e.source,target:e.target,lineStyle:{color:edgeTypeConfig[e.type]?.color||'#333',type:edgeTypeConfig[e.type]?.type||'solid',width:e.type==='similarity'?2:1.5},_edgeType:e.type});});
+    mappingData.forEach(m=>{
+        if(nodeMap[m.requirement_id]&&nodeMap[m.entry_method]){
+            edges.push({source:m.requirement_id,target:m.entry_method,lineStyle:{color:'#e91e63',type:'dashed',width:2,curveness:0.3},_edgeType:'mapping'});
+        }
+    });
+    return edges;
+}
+
+const allEdges=buildAllEdges();
+const categories=Object.keys(nodeTypeConfig).map(k=>({name:k,itemStyle:{color:nodeTypeConfig[k].color}}));
+
+// ===== STATS =====
+function updateStats(){
+    document.getElementById('stats').textContent=`需求图: ${reqNodes.length}节点 ${reqEdges.length}边 | DS-Code图: ${dsNodes.length}节点 ${dsEdges.length}边 | 映射: ${mappingData.length}条`;
+}
+updateStats();
+
+// ===== SIDEBAR FILTERS =====
+const nodeFilterDiv=document.getElementById('node-filters');
+Object.keys(nodeTypeConfig).forEach(type=>{
+    const cfg=nodeTypeConfig[type];
+    const count=allNodes.filter(n=>n.category===type).length;
+    nodeFilterDiv.innerHTML+=`<label><input type="checkbox" checked data-filter="node" data-value="${type}" onchange="applyFilters()"><span class="color-dot" style="background:${cfg.color}"></span>${cfg.label} (${count})</label>`;
+});
+
+const edgeFilterDiv=document.getElementById('edge-filters');
+Object.keys(edgeTypeConfig).forEach(type=>{
+    const cfg=edgeTypeConfig[type];
+    edgeFilterDiv.innerHTML+=`<label><input type="checkbox" checked data-filter="edge" data-value="${type}" onchange="applyFilters()"><span class="color-dot" style="background:${cfg.color}"></span>${cfg.label}</label>`;
+});
+
+const roleFilterDiv=document.getElementById('role-filters');
+Object.keys(roleConfig).forEach(role=>{
+    const cfg=roleConfig[role];
+    const count=dsNodes.filter(n=>n.attributes.role===role).length;
+    if(count>0){roleFilterDiv.innerHTML+=`<label><input type="checkbox" checked data-filter="role" data-value="${role}" onchange="applyFilters()"><span class="color-dot" style="background:${cfg.color}"></span>${cfg.label} (${count})</label>`;}
+});
+
+// ===== ECHARTS =====
+const chart=echarts.init(document.getElementById('chart'));
+
+function getFilteredNodes(){
+    if(currentGraph==='req')return allNodes.filter(n=>n._graphType==='req');
+    if(currentGraph==='ds')return allNodes.filter(n=>n._graphType==='ds');
+    return allNodes;
+}
+
+function getFilteredEdges(nodes){
+    const nodeIds=new Set(nodes.map(n=>n.id));
+    return allEdges.filter(e=>nodeIds.has(e.source)&&nodeIds.has(e.target));
+}
+
+function buildOption(nodes,edges){
+    return{
+        tooltip:{trigger:'item',formatter:function(params){
+            if(params.dataType==='node'){
+                const d=params.data;
+                const attrs=d._attributes||{};
+                const graphType=d._graphType||'ds';
+                const graphLabel=graphType==='req'?'📋 需求图谱':'💻 DS-Code代码图';
+                let info=`<b>${params.name}</b><br/><span style="color:${graphType==='req'?'#283593':'#880e4f'}">${graphLabel}</span>`;
+                info+=`<br/>类型: ${d._type||d.category}`;
+                if(attrs.purpose)info+=`<br/>目的: ${attrs.purpose}`;
+                if(attrs.input)info+=`<br/>输入: ${attrs.input}`;
+                if(attrs.output)info+=`<br/>输出: ${attrs.output}`;
+                if(attrs.role)info+=`<br/>角色: ${attrs.role}`;
+                if(attrs.external_call)info+=`<br/>外部调用: ${attrs.external_call}`;
+                if(attrs.annotations)info+=`<br/>注解: ${attrs.annotations.join(', ')}`;
+                if(attrs.is_cross_module)info+=`<br/><span style="color:red">跨模块调用</span>`;
+                if(attrs.transactional)info+=`<br/><span style="color:green">@Transactional</span>`;
+                if(attrs.call_type)info+=`<br/>调用类型: ${attrs.call_type}`;
+                if(attrs.call_source)info+=`<br/>调用来源: ${attrs.call_source}`;
+                if(attrs.data_access)info+=`<br/>数据访问: ${attrs.data_access}`;
+                if(attrs.parameters)info+=`<br/>参数: ${attrs.parameters.join(', ')}`;
+                if(attrs.return_type)info+=`<br/>返回: ${attrs.return_type}`;
+                return info;
+            }
+            return`${params.data.source} → ${params.data.target}`;
+        }},
+        legend:{show:false},
+        animationDuration:500,
+        animationEasingUpdate:'quinticInOut',
+        series:[{type:'graph',layout:'force',data:nodes,links:edges,categories:categories,roam:true,draggable:true,focusNodeAdjacency:true,force:{repulsion:currentGraph==='both'?150:120,edgeLength:[50,150],gravity:0.08,layoutAnimation:true},label:{show:true,position:'right',formatter:'{b}',fontSize:11,overflow:'truncate',width:120},lineStyle:{curveness:0.1},emphasis:{focus:'adjacency',lineStyle:{width:4}},edgeSymbol:['none','arrow'],edgeSymbolSize:8}]
+    };
+}
+
+function renderChart(){
+    const nodes=getFilteredNodes();
+    const edges=getFilteredEdges(nodes);
+    chart.setOption(buildOption(nodes,edges),true);
+}
+
+renderChart();
+
+// ===== GRAPH SWITCH =====
+function switchGraph(mode){
+    currentGraph=mode;
+    document.querySelectorAll('.graph-toggle button').forEach(b=>b.classList.remove('active'));
+    document.getElementById('btn-'+mode).classList.add('active');
+    renderChart();
+}
+
+// ===== CLICK =====
+chart.on('click',function(params){
+    if(params.dataType==='node'){
+        showDetail(params.data);
+    }
+});
+
+// ===== DETAIL =====
+function showDetail(nodeData){
+    const d=nodeData;
+    const attrs=d._attributes||{};
+    const graphType=d._graphType||'ds';
+    const panel=document.getElementById('detail');
+    const content=document.getElementById('detail-content');
+    const graphLabel=graphType==='req'?'<span class="tag graph-req">📋 需求图谱</span>':'<span class="tag graph-ds">💻 DS-Code代码图</span>';
+    let html=`<h3>${d.name}</h3>`;
+    html+=`<div class="detail-section"><h4>基本信息</h4><div>`;
+    html+=`<p>图谱: ${graphLabel}</p>`;
+    html+=`<p>类型: <span class="tag">${d._type||d.category}</span></p>`;
+    if(attrs.role)html+=`<p>角色: <span class="tag">${attrs.role}</span></p>`;
+    if(attrs.is_cross_module)html+=`<p><span class="tag cross-module">跨模块调用</span></p>`;
+    if(attrs.transactional)html+=`<p><span class="tag transactional">@Transactional</span></p>`;
+    if(attrs.call_type)html+=`<p>调用类型: <span class="tag ${attrs.call_type&&attrs.call_type.includes('接口')?'interface-jump':'framework'}">${attrs.call_type}</span></p>`;
+    if(attrs.call_source)html+=`<p>调用来源: <span class="tag ${attrs.call_source==='external'?'external':'framework'}">${attrs.call_source}</span></p>`;
+    html+=`</div></div>`;
+    if(attrs.purpose)html+=`<div class="detail-section"><h4>目的</h4><p>${attrs.purpose}</p></div>`;
+    if(attrs.input)html+=`<div class="detail-section"><h4>输入</h4><p>${attrs.input}</p></div>`;
+    if(attrs.output)html+=`<div class="detail-section"><h4>输出</h4><p>${attrs.output}</p></div>`;
+    if(attrs.signal_score!==undefined)html+=`<div class="detail-section"><h4>信号评分</h4><p>${attrs.signal_score}</p></div>`;
+    if(attrs.annotations)html+=`<div class="detail-section"><h4>注解</h4><p>${attrs.annotations.map(a=>`<span class="tag">${a}</span>`).join('')}</p></div>`;
+    if(attrs.parameters)html+=`<div class="detail-section"><h4>参数</h4><p>${attrs.parameters.join(', ')}</p></div>`;
+    if(attrs.return_type)html+=`<div class="detail-section"><h4>返回值</h4><p>${attrs.return_type}</p></div>`;
+    if(attrs.external_call)html+=`<div class="detail-section"><h4>外部调用</h4><p><span class="tag cross-module">${attrs.external_call}</span></p></div>`;
+    if(attrs.data_access)html+=`<div class="detail-section"><h4>数据访问</h4><p><span class="tag">${attrs.data_access}</span></p></div>`;
+    if(attrs.source_signals)html+=`<div class="detail-section"><h4>信号来源</h4><p>${attrs.source_signals.map(s=>`<span class="tag">${s}</span>`).join('')}</p></div>`;
+    if(attrs.trigger)html+=`<div class="detail-section"><h4>触发点</h4><p>${attrs.trigger}</p></div>`;
+    if(attrs.terminal_states)html+=`<div class="detail-section"><h4>终结状态</h4><p>${attrs.terminal_states.map(s=>`<span class="tag">${s}</span>`).join('')}</p></div>`;
+    const connected=allEdges.filter(e=>e.source===d.id||e.target===d.id);
+    if(connected.length>0){
+        html+=`<div class="detail-section"><h4>关联 (${connected.length})</h4><div>`;
+        connected.forEach(e=>{
+            const other=e.source===d.id?e.target:e.source;
+            const dir=e.source===d.id?'→':'←';
+            const edgeLabel=edgeTypeConfig[e._edgeType]?.label||e._edgeType;
+            html+=`<p style="font-size:11px">${dir} <b>${other}</b> <span class="tag" style="font-size:10px">${edgeLabel}</span></p>`;
+        });
+        html+=`</div></div>`;
+    }
+    content.innerHTML=html;
+    panel.classList.add('visible');
+}
+
+function closeDetail(){document.getElementById('detail').classList.remove('visible');}
+
+// ===== SEARCH =====
+function searchNode(){
+    const keyword=document.getElementById('search-input').value.trim().toLowerCase();
+    if(!keyword){resetZoom();return;}
+    const filtered=getFilteredNodes();
+    const matched=filtered.filter(n=>n.name.toLowerCase().includes(keyword));
+    if(matched.length===0){alert('未找到匹配节点');return;}
+    const option={series:[{data:filtered.map(n=>{const isMatch=matched.includes(n);return{...n,itemStyle:{...n.itemStyle,opacity:isMatch?1:0.15},label:{show:isMatch}};}),links:getFilteredEdges(filtered).map(e=>{const srcMatch=matched.some(m=>m.id===e.source);const tgtMatch=matched.some(m=>m.id===e.target);return{...e,lineStyle:{...e.lineStyle,opacity:(srcMatch&&tgtMatch)?1:0.05}};})}]};
+    chart.setOption(option);
+    chart.dispatchAction({type:'focusNodeAdjacency',seriesIndex:0,dataIndex:filtered.indexOf(matched[0])});
+}
+
+function resetZoom(){document.getElementById('search-input').value='';renderChart();}
+
+// ===== FILTERS =====
+function applyFilters(){
+    const activeNodeTypes=new Set();
+    document.querySelectorAll('input[data-filter="node"]:checked').forEach(cb=>activeNodeTypes.add(cb.dataset.value));
+    const activeRoles=new Set();
+    document.querySelectorAll('input[data-filter="role"]:checked').forEach(cb=>activeRoles.add(cb.dataset.value));
+    let nodes=getFilteredNodes();
+    nodes=nodes.filter(n=>{
+        if(!activeNodeTypes.has(n.category))return false;
+        const attrs=n._attributes||{};
+        if(n.category==='Method'&&attrs.role&&!activeRoles.has(attrs.role))return false;
+        return true;
+    });
+    const nodeIds=new Set(nodes.map(n=>n.id));
+    const edges=allEdges.filter(e=>nodeIds.has(e.source)&&nodeIds.has(e.target));
+    chart.setOption(buildOption(nodes,edges),true);
+}
+
+window.addEventListener('resize',()=>chart.resize());
+</script>
+</body>
+</html>
