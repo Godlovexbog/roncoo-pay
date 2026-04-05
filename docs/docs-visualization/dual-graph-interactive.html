@@ -44,6 +44,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica N
 #detail .tag.framework{background:#f3e5f5;color:#6a1b9a}
 #detail .tag.external{background:#fff3e0;color:#e65100}
 #detail .tag.interface-jump{background:#e0f7fa;color:#006064;border:1px solid #00bcd4}
+#detail .tag.mq{background:#e8f5e9;color:#2e7d32;border:1px solid #4caf50}
 #detail .close-btn{float:right;background:none;border:none;font-size:18px;cursor:pointer;color:#999}
 #detail .close-btn:hover{color:#333}
 </style>
@@ -143,10 +144,22 @@ const dsNodes = [
 {"id":"M:RpPayWayServiceImpl.getByPayWayTypeCode","type":"Method","attributes":{"name":"getByPayWayTypeCode","parameters":["String","String","String"],"return_type":"RpPayWay","module":"roncoo-pay-service/user","role":"shared"}},
 {"id":"C:RpPayWayDao","type":"Class","attributes":{"name":"RpPayWayDao","module":"roncoo-pay-service/user","role":"injected_dependency"}},
 {"id":"M:RpPayWayDao.getBy","type":"Method","attributes":{"name":"getBy","parameters":["Map"],"return_type":"RpPayWay","module":"roncoo-pay-service/user","role":"framework","data_access":"READ"}},
-{"id":"C:RpNotifyService","type":"Class","attributes":{"name":"RpNotifyService","module":"roncoo-pay-notify","role":"injected_dependency"}},
-{"id":"M:RpNotifyService.orderSend","type":"Method","attributes":{"name":"orderSend","module":"notify","role":"shared","is_cross_module":true}},
-{"id":"M:RpNotifyService.notifySend","type":"Method","attributes":{"name":"notifySend","module":"notify","role":"shared","is_cross_module":true}},
-{"id":"C:RpAccountTransactionService","type":"Class","attributes":{"name":"RpAccountTransactionService","module":"roncoo-pay-account","role":"injected_dependency"}},
+{"id":"C:RpNotifyService","type":"Class","attributes":{"name":"RpNotifyService","module":"roncoo-pay-service/notify","role":"injected_dependency"}},
+{"id":"C:RpNotifyServiceImpl","type":"Class","attributes":{"name":"RpNotifyServiceImpl","module":"roncoo-pay-service/notify","implements":["RpNotifyService"]}},
+{"id":"M:RpNotifyService.notifySend","type":"Method","attributes":{"name":"notifySend","parameters":["String","String","String"],"module":"roncoo-pay-service/notify","role":"shared","is_cross_module":true}},
+{"id":"M:RpNotifyServiceImpl.notifySend","type":"Method","attributes":{"name":"notifySend","parameters":["String notifyUrl","String merchantOrderNo","String merchantNo"],"module":"roncoo-pay-service/notify","role":"shared"}},
+{"id":"M:RpNotifyServiceImpl.orderSend","type":"Method","attributes":{"name":"orderSend","parameters":["String bankOrderNo"],"module":"roncoo-pay-service/notify","role":"shared"}},
+{"id":"C:JmsTemplate","type":"Class","attributes":{"name":"JmsTemplate","module":"org.springframework.jms","role":"framework_injection"}},
+{"id":"M:JmsTemplate.send","type":"Method","attributes":{"name":"send","parameters":["MessageCreator"],"module":"spring-jms","role":"framework","call_source":"framework"}},
+{"id":"M:JmsTemplate.setDefaultDestinationName","type":"Method","attributes":{"name":"setDefaultDestinationName","parameters":["String"],"module":"spring-jms","role":"framework","call_source":"framework"}},
+{"id":"C:MqConfig","type":"Class","attributes":{"name":"MqConfig","module":"roncoo-pay-common-core","role":"config"}},
+{"id":"M:MqConfig.MERCHANT_NOTIFY_QUEUE","type":"Method","attributes":{"name":"MERCHANT_NOTIFY_QUEUE","module":"common-core","role":"config","call_source":"framework"}},
+{"id":"M:MqConfig.ORDER_NOTIFY_QUEUE","type":"Method","attributes":{"name":"ORDER_NOTIFY_QUEUE","module":"common-core","role":"config","call_source":"framework"}},
+{"id":"C:NotifyStatusEnum","type":"Class","attributes":{"name":"NotifyStatusEnum","module":"roncoo-pay-service/notify","role":"enum"}},
+{"id":"M:NotifyStatusEnum.CREATED.name","type":"Method","attributes":{"name":"name","return_type":"String","module":"enum","role":"enum_method","call_source":"framework"}},
+{"id":"C:NotifyTypeEnum","type":"Class","attributes":{"name":"NotifyTypeEnum","module":"roncoo-pay-service/notify","role":"enum"}},
+{"id":"M:NotifyTypeEnum.MERCHANT.name","type":"Method","attributes":{"name":"name","return_type":"String","module":"enum","role":"enum_method","call_source":"framework"}},
+{"id":"C:RpAccountTransactionService","type":"Class","attributes":{"name":"RpAccountTransactionService","module":"roncoo-pay-service/account","role":"injected_dependency"}},
 {"id":"M:RpAccountTransactionService.creditToAccount","type":"Method","attributes":{"name":"creditToAccount","module":"account","role":"shared","is_cross_module":true}},
 {"id":"M:WeiXinPayUtil.micropay","type":"Method","attributes":{"name":"micropay","module":"trade/utils/weixin","role":"shared","external_call":"微信刷卡支付API"}},
 {"id":"M:AliPayUtil.tradePay","type":"Method","attributes":{"name":"tradePay","module":"trade/utils/alipay","role":"shared","external_call":"支付宝条码支付API"}},
@@ -300,6 +313,10 @@ const dsEdges = [
 {"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","type":"call"},
 {"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:MerchantApiUtil.getSign","type":"call"},
 {"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:RpNotifyService.orderSend","type":"call"},
+{"source":"M:RpNotifyService.orderSend","target":"M:RpNotifyServiceImpl.orderSend","type":"call","attributes":{"call_type":"接口→实现类跳转","resolved_via_inherit":true}},
+{"source":"M:RpNotifyServiceImpl.orderSend","target":"M:JmsTemplate.setDefaultDestinationName","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpNotifyServiceImpl.orderSend","target":"M:JmsTemplate.send","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:JmsTemplate.setDefaultDestinationName","target":"M:MqConfig.ORDER_NOTIFY_QUEUE","type":"call","attributes":{"call_source":"framework"}},
 {"source":"M:RpTradePaymentManagerServiceImpl.getF2FPayResultVo","target":"M:Map.put","type":"call","attributes":{"call_source":"framework"}},
 {"source":"M:RpTradePaymentRecordDao.update","target":"M:BaseDaoImpl.update","type":"call","attributes":{"call_type":"super.update()"}},
 {"source":"M:BaseDaoImpl.update","target":"M:BaseDaoImpl.getStatement","type":"call"},
@@ -325,6 +342,11 @@ const dsEdges = [
 {"source":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","target":"M:MerchantApiUtil.getParamStr","type":"call"},
 {"source":"M:RpTradePaymentManagerServiceImpl.getMerchantNotifyUrl","target":"M:MerchantApiUtil.getSign","type":"call"},
 {"source":"M:RpTradePaymentManagerServiceImpl.completeSuccessOrder","target":"M:RpNotifyService.notifySend","type":"call"},
+{"source":"M:RpNotifyService.notifySend","target":"M:RpNotifyServiceImpl.notifySend","type":"call","attributes":{"call_type":"接口→实现类跳转","resolved_via_inherit":true}},
+{"source":"M:RpNotifyServiceImpl.notifySend","target":"M:JSONObject.toJSON","type":"call","attributes":{"call_source":"external"}},
+{"source":"M:RpNotifyServiceImpl.notifySend","target":"M:JmsTemplate.setDefaultDestinationName","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:RpNotifyServiceImpl.notifySend","target":"M:JmsTemplate.send","type":"call","attributes":{"call_source":"framework"}},
+{"source":"M:JmsTemplate.setDefaultDestinationName","target":"M:MqConfig.MERCHANT_NOTIFY_QUEUE","type":"call","attributes":{"call_source":"framework"}},
 {"source":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","target":"M:RpTradePaymentRecordDao.update","type":"call"},
 {"source":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","target":"M:RpTradePaymentOrderDao.update","type":"call"},
 {"source":"M:RpTradePaymentManagerServiceImpl.completeFailOrder","target":"M:RpTradePaymentOrderDao.selectByMerchantNoAndMerchantOrderNo","type":"call"},
@@ -398,7 +420,8 @@ const roleConfig = {
     'framework_injection':{color:'#78909c',label:'框架注入'},
     'utility':{color:'#26a69a',label:'工具类'},
     'enum_method':{color:'#8bc34a',label:'枚举方法'},
-    'external_library':{color:'#ff7043',label:'外部库'}
+    'external_library':{color:'#ff7043',label:'外部库'},
+    'config':{color:'#90a4ae',label:'配置'}
 };
 
 // ===== STATE =====

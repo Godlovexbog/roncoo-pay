@@ -1,10 +1,10 @@
-# 接口文档
+# 接口文档：条码支付流程
 
 ## POST /f2fPay/doPay
 
-**所属能力**: CAP-02 条码支付能力
-**Controller**: F2FPayController.initPay()
-**JavaDoc**: 条码支付,商户通过前置设备获取到用户支付授权码后,请求支付网关支付.
+**所属能力**：CAP-02 条码支付能力
+**Controller**：F2FPayController.initPay()
+**JavaDoc**：条码支付,商户通过前置设备获取到用户支付授权码后,请求支付网关支付.
 
 ### 请求参数
 
@@ -50,11 +50,13 @@
 |---------|---------|---------|---------|
 | 参数校验失败 | BizException | 字段校验错误 | payKey/authCode/orderNo长度不合法，orderPrice格式错误 |
 | 交易类型错误 | PayBizException | 交易类型有误，不支持该交易 | payType不是MICRO_PAY或F2F_PAY |
-| 商户配置异常 | UserBizException | 用户支付配置有误 | payKey对应的商户配置不存在或费率配置缺失 |
+| 商户配置异常 | PayBizException | 用户异常 | payKey对应的商户配置不存在 |
 | 商户不存在 | UserBizException | 用户不存在 | merchantNo对应的商户信息不存在 |
 | 订单金额不匹配 | TradeBizException | 错误的订单 | 已存在订单的金额与传入金额不一致 |
 | 重复支付 | TradeBizException | 订单已支付成功,无需重复支付 | 已存在订单状态为SUCCESS |
 | 支付方式错误 | TradeBizException | 错误的支付方式 | payWayCode不是WEIXIN或ALIPAY |
+| 签名验证失败 | TradeBizException | 订单签名异常 | MD5签名与传入sign不一致 |
+| IP白名单校验失败 | TradeBizException | 非法IP请求 | 请求IP不在商户配置的白名单中 |
 
 ### 调用示例
 
@@ -78,8 +80,8 @@ payKey=test1234567890123456
 
 ## GET /f2fPay/order/query
 
-**所属能力**: CAP-02 条码支付能力
-**Controller**: F2FPayController.orderQuery()
+**所属能力**：CAP-02 条码支付能力
+**Controller**：F2FPayController.orderQuery()
 
 ### 请求参数
 

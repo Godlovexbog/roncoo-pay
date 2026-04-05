@@ -1,4 +1,4 @@
-# 数据库设计
+# 数据库设计：条码支付流程
 
 ## 表清单
 
@@ -6,6 +6,10 @@
 |------|--------|---------|---------|
 | rp_trade_payment_order | RpTradePaymentOrder | CAP-02 | READ, WRITE |
 | rp_trade_payment_record | RpTradePaymentRecord | CAP-02 | READ, WRITE |
+| rp_user_pay_config | RpUserPayConfig | user模块 | READ |
+| rp_user_info | RpUserInfo | user模块 | READ |
+| rp_pay_way | RpPayWay | user模块 | READ |
+| rp_user_pay_info | RpUserPayInfo | user模块 | READ |
 
 ---
 
@@ -146,6 +150,9 @@
 ```mermaid
 erDiagram
     rp_trade_payment_order ||--o{ rp_trade_payment_record : "1对多关联"
+    rp_user_pay_config ||--o{ rp_trade_payment_order : "配置关联"
+    rp_user_info ||--o{ rp_trade_payment_order : "商户关联"
+    rp_pay_way ||--o{ rp_trade_payment_order : "费率关联"
 
     rp_trade_payment_order {
         BIGINT id PK
