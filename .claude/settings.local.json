@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__gitnexus__context",
+      "Bash(claude skill:*)",
+      "Bash(claude mcp:*)",
+      "Bash(claude /help)",
+      "Bash(where claude:*)",
+      "Bash(where npx:*)",
+      "Read(//mnt/c/Users/mi/AppData/Roaming/npm/node_modules/**)",
+      "Read(//mnt/c/Users/mi/AppData/Local/npm/**)",
+      "Bash(cmd.exe /c 'where claude')",
+      "Read(//d/Program Files/nodejs/node_modules/**)",
+      "Bash(npm list:*)",
+      "mcp__gitnexus__list_repos",
+      "mcp__gitnexus__query",
+      "mcp__gitnexus__impact",
+      "mcp__gitnexus__route_map",
+      "mcp__gitnexus__cypher",
+      "Bash(git clone:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(npx --yes claude-code --version)",
+      "Bash(dir \"C:\\\\Users\\\\mi\\\\AppData\\\\Roaming\\\\npm\\\\claude*\")",
+      "Bash(dir \"C:\\\\Users\\\\mi\\\\AppData\\\\Local\\\\claude\\\\*\")",
+      "Bash(dir:*)",
+      "Bash(mkdir -p \"C:/Users/mi/.claude/plugins/superpowers\")",
+      "Read(//c/Users/mi/.claude/plugins/**)",
+      "Bash(rmdir \"C:/Users/mi/.claude/plugins/superpowers\")",
+      "Bash(powershell -Command \"New-Item -ItemType Junction -Path ''C:\\\\Users\\\\mi\\\\.claude\\\\plugins\\\\superpowers'' -Target ''D:\\\\code\\\\ai\\\\superpowers'' -Force\")",
+      "Skill(update-config)",
+      "Bash(openspec list:*)",
+      "Bash(npx gitnexus:*)",
+      "Bash(npx openspec:*)",
+      "Bash(mv \"D:/code/ai/roncoo-pay/.claude/skills/biz-flow-graph\" \"D:/code/ai/roncoo-pay/.claude/skills/biz-flow\")",
+      "Bash(mv \"D:/code/ai/roncoo-pay/.claude/skills/biz-rule-extraction\" \"D:/code/ai/roncoo-pay/.claude/skills/biz-rule\")"
+    ]
+  }
+}
