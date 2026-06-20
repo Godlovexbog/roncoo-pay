@@ -15,28 +15,30 @@
 
 ## 核心架构
 
-10 个 Maven 模块，按 **四层** 组织，通过 **ActiveMQ** 实现应用层与业务层异步解耦。
+10 个 Maven 模块，按四层组织，web 层同步调 Service、app 层通过 **ActiveMQ** 异步解耦。
 
 ```
-表现层 (Web)                应用层 (App, 独立进程)         业务服务层             基础设施层
+表现层 (Web)               应用层 (App, 独立进程)       业务服务层             基础设施层
 +-----------------------+  +--------------------------+  +-------------------+  +-------------------+
-| gateway :8092/:bos    |  | app-notify       (8095)  |  | roncoo-pay-       |  | roncoo-pay-       |
-| boss    :8091/:bos    |  | app-order-polling(8096)  |  | service           |  | common-core       |
-| merchant:8093/:bos    |  | app-recon.      (8097)  |  | (7个子域+所有DAO)  |  | (基类/工具/枚举)   |
-| sample  :8094/:bos    |  | app-settlement  (8098)  |  |                    |  |                    |
+| gateway :8092         |  | app-notify       (8095)  |  | roncoo-pay-       |  | roncoo-pay-       |
+| boss    :8091         |  | app-order-polling(8096)  |  | service           |  | common-core       |
+| merchant:8093         |  | app-recon.      (8097)  |  | (7子域+所有DAO)    |  | (基类/工具/枚举)    |
+| sample  :8094         |  | app-settlement  (8098)  |  |                    |  |                    |
 +-----------------------+  +--------------------------+  +-------------------+  +-------------------+
-      |                           |                            |                      ^
-      +-----> Service 接口 <------+------ ActiveMQ ------> DAO -> MySQL              |
-                                                              |                      |
-                                                         所有模块依赖 ---------------+
+      |                          |                           |                     ^
+      +----> Service 接口 <------+---- ActiveMQ ----------> DAO -> MySQL         |
+                                                            |                     |
+                                                       所有模块依赖 -------------+
 ```
 
-- **表现层**: Spring MVC + JSP，Controller 返回 ModelAndView（非 REST API），调用 Service 接口。
-- **应用层**: 4 个独立 JAR，通过 ActiveMQ Listener 或定时任务触发，调 Service 执行业务。
-- **业务服务层**: 核心模块，7 个子域（trade/user/account/notify/reconciliation/permission/banklink），Interface-Impl 模式。
-- **基础设施层**: BaseEntity/BaseDao/BaseController 基类、分页、异常、工具类。
+- **表现层**: Spring MVC + JSP，Controller 返回 ModelAndView，UI 框架 DWZ（boss）/ AdminLTE（merchant）/ 原生 JSP（sample）。
+- **应用层**: 4 个独立 JAR，通过 ActiveMQ Listener 或定时任务触发，各自有 `@SpringBootApplication` 入口。
+- **业务服务层**: 核心模块 roncoo-pay-service，7 个子域（trade/user/account/notify/reconciliation/permission/banklink），Interface-Impl 模式。
+- **基础设施层**: BaseEntity/BaseDao/BaseController 基类、分页、异常、工具类，被所有模块依赖。
 
-依赖方向单向无环: `common-core <- service <- web-* / app-*`。
+> **已知问题**: common-core 与 service 存在一处循环依赖（`MqConfig.java` 反向引用 service 模块实体），破环需将 MqConfig 下沉到 service。
+
+依赖链理想方向: `common-core <- service <- web-* / app-*`。
 
 详见 [architecture.md](docs/biz-loop/panorama/architecture.md)。
 
@@ -46,7 +48,7 @@
 
 详见 [architecture.md](docs/biz-loop/panorama/architecture.md) 模块清单与依赖矩阵。速览：
 
-### 业务服务层 — roncoo-pay-service（单模块，7 子域）
+### 业务服务层 -- roncoo-pay-service（单模块，7 子域）
 
 | 子域 | 核心职责 | 入口 Service |
 |------|---------|-------------|
@@ -62,10 +64,10 @@
 
 | 模块 | 端口 | 类型 | 一句话职责 |
 |------|------|------|-----------|
-| web-gateway | 8092 | Web | 支付网关入口（扫码/F2F/小程序/回调） |
-| web-boss | 8091 | Web | 运营后台（交易/商户/对账/权限管理，DWZ UI） |
-| web-merchant | 8093 | Web | 商户后台（交易/账户/结算查看，AdminLTE UI） |
-| web-sample-shop | 8094 | Web | 模拟商户网站（演示对接流程） |
+| web-gateway | 8092 | Web | 支付网关入口（扫码/F2F/小程序/回调），context-path `/roncoo-pay-web-gateway` |
+| web-boss | 8091 | Web | 运营后台（交易/商户/对账/权限管理，DWZ UI），context-path `/boss` |
+| web-merchant | 8093 | Web | 商户后台（交易/账户/结算查看，AdminLTE UI），context-path `/mch` |
+| web-sample-shop | 8094 | Web | 模拟商户网站（演示对接流程），context-path 根路径 |
 | app-notify | 8095 | App | 异步通知：MQ 消费 + HTTP POST 商户回调 |
 | app-order-polling | 8096 | App | 订单轮询：MQ 消费 + 定时回查银行 |
 | app-reconciliation | 8097 | App | 定时对账：下载账单、解析、比对、差错 |
@@ -75,7 +77,7 @@
 
 ## 关键约定
 
-### 核心命名模式（一行说明）
+### 核心命名模式
 
 Entity 无后缀位于 `entity` 包（业务 `Rp` 前缀，权限 `Pms` 前缀）；VO → `XxxVo`；BO → `XxxBo`；DAO → `XxxDao`/`XxxDaoImpl`；Service → `XxxService`/`XxxServiceImpl`；编排 → `XxxBiz`；Controller → `XxxController`；任务 → `XxxTask`。
 
@@ -88,7 +90,7 @@ Controller → Service(接口) → ServiceImpl → Dao(接口) → DaoImpl(exten
 - DAO 和 Service 均采用 Interface-Impl 分离模式。
 - Entity 为纯 POJO，无 ORM 注解，SQL 全量写在 Mapper XML 中。
 - Controller 返回 ModelAndView + JSP（无 `@RestController`/`@ResponseBody`）。
-- app 模块内部按 `app.{domain}.core/biz/entity/parser/scheduled` 组织，各自有 `@SpringBootApplication` 入口。
+- app 模块内部按 `app.{domain}.core/biz/entity/parser/scheduled` 组织。
 
 ### 配置加载方式（混合四种模式）
 
@@ -124,7 +126,8 @@ cd roncoo-pay && mvn clean install -DskipTests
 ### 数据库初始化
 
 ```bash
-# 数据库名: roncoo_mini_pay_demo, JDBC: jdbc:mysql://127.0.0.1:3306/roncoo_mini_pay_demo
+# 数据库名: roncoo_mini_pay_demo
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS roncoo_mini_pay_demo DEFAULT CHARSET utf8mb4"
 mysql -u root -p roncoo_mini_pay_demo < sql/init.sql
 ```
 
@@ -177,17 +180,15 @@ mysql -u root -p roncoo_mini_pay_demo < sql/init.sql
 
 ### 支付通道
 
-**微信支付**（统一下单/订单查询/被扫支付/下载对账单）与 **支付宝**（PC 网页支付 MD5 + 被扫/查询 RSA SDK），另有鉴权服务（auth_config 配置的示例接口）和模拟商户对接。
+**微信支付**（统一下单/订单查询/被扫支付/下载对账单，自封装无官方 SDK）与 **支付宝**（PC 网页支付 MD5 MAPI + 被扫/查询 RSA2 OpenAPI SDK），另有鉴权服务（auth_config 配置的示例接口）和模拟商户对接。
 
 ### 中间件
 
 | 中间件 | 用途 | 连接 |
 |--------|------|------|
 | MySQL | 主数据库（Druid 连接池） | `127.0.0.1:3306/roncoo_mini_pay_demo` |
-| ActiveMQ | 异步消息（通知队列 + 订单查询队列） | `failover:(tcp://127.0.0.1:61616)` |
+| ActiveMQ | 异步消息（通知队列 `opensource_demo_tradeNotify` + 订单查询队列 `opensource_demo_orderQuery`） | `failover:(tcp://127.0.0.1:61616)` |
 | Ehcache | Shiro 权限缓存（仅 web-boss） | 本地 JVM |
-
-> 消息队列: `opensource_demo_tradeNotify`（通知）、`opensource_demo_orderQuery`（订单轮询）。
 
 详见 [external-deps.md](docs/biz-loop/panorama/external-deps.md)。
 
@@ -214,3 +215,47 @@ mysql -u root -p roncoo_mini_pay_demo < sql/init.sql
 | [config.md](docs/biz-loop/panorama/config.md) | 配置全景：端口、数据库、MQ、支付通道、日志、缓存、安全 |
 | [external-deps.md](docs/biz-loop/panorama/external-deps.md) | 外部依赖：框架库版本、HTTP API URL、中间件连接信息 |
 | [env/setup.md](docs/biz-loop/panorama/env/setup.md) | 环境搭建：编译、数据库初始化、启动步骤、注意事项 |
+
+<!-- gitnexus:start -->
+# GitNexus -- Code Intelligence
+
+This project is indexed by GitNexus as **roncoo-pay** (20163 symbols, 49891 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root -- it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash -> `npm i -g gitnexus`; #1939).
+
+## Always Do
+
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows. For regression review, compare against the default branch: `detect_changes({scope: "compare", base_ref: "master"})`.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol -- callers, callees, which execution flows it participates in -- use `context({name: "symbolName"})`.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace -- use `rename` which understands the call graph.
+- NEVER commit changes without running `detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/roncoo-pay/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/roncoo-pay/clusters` | All functional areas |
+| `gitnexus://repo/roncoo-pay/processes` | All execution flows |
+| `gitnexus://repo/roncoo-pay/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->

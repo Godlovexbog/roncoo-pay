@@ -1,27 +1,55 @@
 ---
 name: panorama-data-model
-description: 提取所有数据对象——按实际命名模式自适应发现
+description: 提取所有数据对象——cypher 全量扫描，不预设包名
 tools: Read, Write, mcp__gitnexus__cypher, mcp__gitnexus__context
 ---
 
 ## 数据对象提取
 
-读 `docs/biz-loop/panorama/.fingerprint.md` 了解项目的实际命名模式，然后用对应模式搜索数据对象。
+读 `docs/biz-loop/panorama/.fingerprint.md` 了解项目语言，然后用 GitNexus cypher **全量扫描**所有数据类。
 
 ### 步骤
 
-1. **发现数据对象**: 用 GitNexus cypher 查所有 Class/Struct/Interface，按指纹中的命名模式聚类：
-   - 指纹说什么就叫什么（是 Entity 就搜 Entity，是 Model 就搜 Model，是 Schema 就搜 Schema）
-   - 多种模式共存就都列出来，如实分组
+**1. 全量发现所有 Class（不预设包名）**
 
-2. **注解辅助**: 搜索数据相关注解补充发现：
-   - Java: `@Entity`, `@Table`, `@Document`, `@Embeddable`, `@Schema`
-   - Python: `@dataclass`, SQLAlchemy Model, Pydantic BaseModel
-   - TypeScript: `@Entity()`, `@Schema()`, Prisma model/type
+```
+MATCH (c:Class) 
+WHERE NOT c.filePath CONTAINS 'test'
+  AND NOT c.filePath CONTAINS 'controller'
+  AND NOT c.filePath CONTAINS 'service'
+  AND NOT c.filePath CONTAINS 'config'
+  AND NOT c.filePath CONTAINS 'utils'
+  AND NOT c.filePath CONTAINS 'filter'
+  AND NOT c.filePath CONTAINS 'interceptor'
+  AND NOT c.filePath CONTAINS 'listener'
+  AND NOT c.filePath CONTAINS 'aspect'
+RETURN c.name, c.filePath
+ORDER BY c.filePath
+```
 
-3. **枚举/常量**: 查 Enum/Enumeration 节点，搜索 `public enum`, `enum class`, `Enum`, `const`
+**2. 自动分组（不预设 Entity/VO/DTO 等名称）**
 
-4. **获取详情**: 对每个数据对象用 context 获取字段名、类型、约束注解/tag、继承关系
+按实际包路径后缀自动聚类：
+- 包路径含 `entity`/`domain`/`model`/`po`/`do`/`persistence` → 持久化实体
+- 包路径含 `dto`/`vo`/`bo`/`request`/`response`/`bean` → 数据传输对象
+- 包路径含 `enums`/`enumeration`/`constant` → 枚举
+
+对无法归类的，按继承关系判断：
+- 继承 `BaseEntity`/`BaseDO`/`BasePO` → 持久化实体
+- 实现 `Serializable` 且无持久化基类 → DTO/VO
+- 是 `Enum`/`enum` → 枚举
+
+**3. 全量获取详情**
+
+对每个数据对象用 context 获取字段、类型、约束注解/tag。
+
+**4. 发现枚举**
+
+```
+MATCH (e:Enum) RETURN e.name, e.filePath
+```
+
+对 App 层的枚举（如有）也纳入。
 
 ### 产出
 
@@ -30,17 +58,29 @@ tools: Read, Write, mcp__gitnexus__cypher, mcp__gitnexus__context
 ```markdown
 # 数据模型
 
-## Entity (数据库实体)
-| 名称 | 表名 | 文件 | 字段 |
-|------|------|------|------|
+> cypher 全量扫描 / 发现 N 个数据对象: Entity X / VO Y / Enum Z
 
-## DTO (数据传输对象)
+## 公共基类
+(如有)
+
+## Entity
+| 名称 | 说明 | 文件 | 核心字段 |
+
+## VO/DTO/BO
 | 名称 | 用途 | 文件 | 字段 |
-|------|------|------|------|
 
-## Enum (枚举)
-| 名称 | 用途 | 文件 | 值列表 |
-|------|------|------|--------|
+## Enum
+| 名称 | 用途 | 文件 | 值 |
 
-(分组名称来自实际代码,如代码中叫 Domain/Schema/Record/Model 就如实用这些名称)
+## 发现统计
+- 总扫描 Class: N
+- 持久化实体: X
+- VO/DTO/BO: Y
+- Enum: Z
 ```
+
+### 质量门
+
+- 是否扫描了所有模块（含 app-* 独立进程）？
+- 枚举是否涵盖 common-core + service + app？
+- 是否有遗漏的包路径模式（如 `record`/`schema`/`document`）？

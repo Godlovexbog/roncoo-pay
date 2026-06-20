@@ -38,7 +38,8 @@
       "Bash(mv /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-loop/biz-impact /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-impact)",
       "Bash(mv /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-loop/biz-sync /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-sync)",
       "Bash(rmdir /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-loop)",
-      "Skill(biz-panorama)"
+      "Skill(biz-panorama)",
+      "Skill(biz-impact)"
     ]
   }
 }

@@ -1,20 +1,51 @@
 ---
 name: panorama-architecture
-description: 提取项目分层架构和模块依赖
+description: 提取项目分层架构和模块依赖——cypher 全量扫描，不抽样
 tools: Read, Write, Bash, mcp__gitnexus__cypher, mcp__gitnexus__context
 ---
 
 ## 架构提取
 
-读 `docs/biz-loop/panorama/.fingerprint.md` 了解项目特征，然后提取分层架构。
+读 `docs/biz-loop/panorama/.fingerprint.md` 了解项目特征，用 cypher **全量扫描**分层和依赖关系。
 
 ### 步骤
 
-1. **发现分层**: 用 GitNexus cypher 按目录层级分组类，根据指纹中的命名模式识别各层。不预设 controller/service/repository，用实际目录名。
+**1. 全量发现所有模块和分层（不抽样）**
 
-2. **模块依赖**: 从构建文件提取模块间 `dependency` 关系。检测循环依赖（A→B 且 B→A），标注。
+```
+MATCH (f:File) 
+WHERE NOT f.filePath CONTAINS 'test'
+RETURN f.filePath
+```
 
-3. **验证职责**: 从每层挑 2-3 个代表类，用 context 看具体做什么，确认职责推断。
+按文件路径前缀分组，自动聚合为模块。不用"挑 2-3 个代表类"——全量统计每个路径前缀下的类数量，按实际分布确定模块边界。
+
+**2. 模块间依赖关系（cypher 全量）**
+
+```
+MATCH (f1:File)-[r:CodeRelation {type: 'IMPORTS'}]->(f2:File)
+WHERE f1.filePath <> f2.filePath 
+  AND NOT f1.filePath CONTAINS 'test' 
+  AND NOT f2.filePath CONTAINS 'test'
+RETURN f1.filePath, f2.filePath
+```
+
+按模块聚合 import 边 → 构建模块依赖矩阵。标注循环依赖（A→B 且 B→A）。
+
+**3. 分层识别（基于实际路径结构）**
+
+按文件路径前缀统计类分布：
+- 含 `controller`/`handler`/`router`/`resource`/`web` → 表现层
+- 含 `service`/`manager`/`usecase`/`domain` → 业务层
+- 含 `repository`/`dao`/`mapper`/`repo` → 数据层
+- 含 `common`/`core`/`base`/`shared`/`util` → 基础设施层
+- 含 `app`/`application`/`scheduled` → 应用层
+
+不预设分层名称——如实反映实际目录结构中的层。
+
+**4. 每层全量统计**
+
+每层列出**所有类**（或至少前 20 个核心类），而不是只抽样 2-3 个。统计每层的类数量、接口数量、抽象类数量。
 
 ### 产出
 
@@ -23,13 +54,27 @@ tools: Read, Write, Bash, mcp__gitnexus__cypher, mcp__gitnexus__context
 ```markdown
 # 项目架构
 
+> cypher 全量扫描 / N 个模块, M 个文件
+
 ## 整体分层
-(描述实际发现的分层结构,如 "网关层 → 服务层 → 数据层" 或 "Router → Controller → Service → Repository")
+(ASCII 分层图 + 每层一句话职责 + 每层类数量)
 
 ## 模块清单
-| 模块 | 职责 | 主要技术 |
-|------|------|---------|
+| 模块 | 目录 | 类数 | 职责 |
+|------|------|------|------|
 
 ## 模块依赖矩阵
-(表格,标注循环依赖)
+| | 模块A | 模块B | ... |
+|------|------|------|------|
+| 模块A | — | ← 依赖 | ← 依赖 |
+
+## 分层统计
+| 层 | 类数 | 接口数 | 关键类 |
+|----|------|--------|--------|
 ```
+
+### 质量门
+
+- 是否覆盖了所有 Maven 模块（含 app-*）？
+- 依赖矩阵是否标注了循环依赖？
+- 每层类数量统计是否完整？
