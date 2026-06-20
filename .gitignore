@@ -7,4 +7,5 @@
 *.springBeans
 .project
 roncoo-pay.iml
-
+openspec
+docs

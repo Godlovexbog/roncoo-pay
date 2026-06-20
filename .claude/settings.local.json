@@ -33,7 +33,12 @@
       "Bash(npx gitnexus:*)",
       "Bash(npx openspec:*)",
       "Bash(mv \"D:/code/ai/roncoo-pay/.claude/skills/biz-flow-graph\" \"D:/code/ai/roncoo-pay/.claude/skills/biz-flow\")",
-      "Bash(mv \"D:/code/ai/roncoo-pay/.claude/skills/biz-rule-extraction\" \"D:/code/ai/roncoo-pay/.claude/skills/biz-rule\")"
+      "Bash(mv \"D:/code/ai/roncoo-pay/.claude/skills/biz-rule-extraction\" \"D:/code/ai/roncoo-pay/.claude/skills/biz-rule\")",
+      "Bash(mv /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-loop/biz-panorama /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-panorama)",
+      "Bash(mv /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-loop/biz-impact /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-impact)",
+      "Bash(mv /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-loop/biz-sync /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-sync)",
+      "Bash(rmdir /Users/wubo/code/ai/roncoo-pay/.claude/skills/biz-loop)",
+      "Skill(biz-panorama)"
     ]
   }
 }
